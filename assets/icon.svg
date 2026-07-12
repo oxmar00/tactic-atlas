@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">ATT&amp;CK Playbook Console</title>
+  <rect width="512" height="512" rx="112" fill="#0b0f17"/>
+  <path d="M256 78 404 132v112c0 92-58 160-148 193-90-33-148-101-148-193V132l148-54Z" fill="#151d2c" stroke="#70d7ff" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M177 204h158M177 256h111M177 308h83" fill="none" stroke="#f4f7fb" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="336" cy="308" r="54" fill="#0b0f17" stroke="#70d7ff" stroke-width="15"/>
+  <path d="m309 309 18 18 38-43" fill="none" stroke="#7ce6a2" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

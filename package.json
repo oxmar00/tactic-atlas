@@ -1,0 +1,21 @@
+{
+  "name": "attack-playbook-console",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static MITRE ATT&CK detection and incident-response playbook console",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test": "node scripts/check.mjs --test",
+    "audit-content": "node scripts/audit-content.mjs",
+    "build": "node scripts/build-standalone.mjs",
+    "build:check": "node scripts/build-standalone.mjs --check",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10.9.2",
+  "license": "MIT"
+}

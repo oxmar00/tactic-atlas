@@ -1,0 +1,79 @@
+name: Verify and deploy GitHub Pages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build standalone edition
+        run: npm run build
+
+      - name: Reject generated-artifact drift
+        run: git diff --exit-code -- standalone.html
+
+      - name: Run full quality gate
+        run: npm run check
+
+      - name: Audit dependency vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Stage runtime site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          mkdir -p _site/assets _site/data
+          cp index.html standalone.html manifest.webmanifest service-worker.js README.md LICENSE .nojekyll _site/
+          cp assets/app.js assets/core.js assets/style.css assets/icon.svg _site/assets/
+          cp data/playbooks.json data/playbooks.schema.json _site/data/
+
+      - name: Upload verified site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy verified site
+        id: deployment
+        uses: actions/deploy-pages@v4

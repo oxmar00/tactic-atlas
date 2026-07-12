@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-font="medium" data-width="comfortable">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b0f17">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>ATT&amp;CK Playbook Console — Detection Engineering &amp; Incident Response</title>
+  <meta name="description" content="Enterprise detection engineering, threat hunting, and incident-response playbooks mapped to MITRE ATT&amp;CK.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to playbooks</a>
+  <noscript><div class="system-banner error-banner">JavaScript is required to use the console. The structured source remains available in <a href="data/playbooks.json">playbooks.json</a>.</div></noscript>
+
+  <div class="system-banner offline-banner" id="offline-banner" role="status" hidden>
+    <strong>Offline mode.</strong> Cached playbooks remain available; updates will resume when the network returns.
+  </div>
+  <div class="system-banner update-banner" id="update-banner" role="status" hidden>
+    <span><strong>Update ready.</strong> Reload to use the latest playbooks and application shell.</span>
+    <span class="banner-actions">
+      <button id="update-reload" type="button">Reload now</button>
+      <button id="update-dismiss" type="button">Later</button>
+    </span>
+  </div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="./" aria-label="ATT&CK Playbook Console home">
+        <span class="brand-mark" aria-hidden="true">ATT&amp;CK</span>
+        <span class="brand-copy">
+          <h1>Playbook Console</h1>
+          <span>Detection engineering · Threat hunting · Incident response</span>
+        </span>
+      </a>
+      <div class="dataset-meta" aria-label="Dataset information">
+        <span id="data-version">Version —</span>
+        <span id="data-freshness">Updated —</span>
+      </div>
+      <div class="header-actions" aria-label="Display and command controls">
+        <button class="icon-button" id="command-button" type="button" aria-label="Open command palette" title="Command palette (Ctrl or Command + K)"><span aria-hidden="true">⌘K</span></button>
+        <button class="icon-button" id="font-size" type="button" aria-label="Change text size" title="Change text size"><span aria-hidden="true">A</span></button>
+        <button class="icon-button" id="reading-width" type="button" aria-label="Change playbook reading width" title="Change reading width"><span aria-hidden="true">↔</span></button>
+        <button class="icon-button" id="theme" type="button" aria-label="Use light theme" title="Toggle theme"><span aria-hidden="true">◐</span></button>
+      </div>
+    </div>
+  </header>
+
+  <section class="workspace-controls" aria-label="Search and view controls">
+    <div class="search-box">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <label class="sr-only" for="q">Search all playbook content</label>
+      <input id="q" type="search" placeholder="Search technique, event ID, process, field, query, or response action…" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-describedby="search-help">
+      <kbd aria-hidden="true">/</kbd>
+      <span class="sr-only" id="search-help">Use quotation marks for phrases. Minor spelling differences are tolerated.</span>
+    </div>
+
+    <div class="quick-filters">
+      <label><span>Type</span><select id="kind"><option value="all">All types</option><option value="technique">Techniques</option><option value="operational">Operational</option><option value="platform">Platforms</option></select></label>
+      <label><span>Technique</span><select id="technique"><option value="all">All techniques</option></select></label>
+      <label><span>Platform</span><select id="platform"><option value="all">All platforms</option></select></label>
+      <label><span>Log source</span><select id="source"><option value="all">All sources</option></select></label>
+      <label><span>Severity</span><select id="severity"><option value="all">All severities</option></select></label>
+      <label><span>Maturity</span><select id="maturity"><option value="all">All maturity levels</option></select></label>
+      <label><span>Status</span><select id="status"><option value="all">All statuses</option></select></label>
+      <label><span>Sort</span><select id="sort"><option value="id">Technique ID</option><option value="relevance">Relevance</option><option value="name">Name</option><option value="quality">Quality score</option><option value="severity">Severity</option></select></label>
+    </div>
+
+    <div class="control-row">
+      <div class="toggle-group" aria-label="Personal filters">
+        <button id="favorites" type="button" aria-pressed="false"><span aria-hidden="true">☆</span> Saved</button>
+        <button id="recent" type="button" aria-pressed="false"><span aria-hidden="true">◷</span> Recent</button>
+      </div>
+      <div class="view-switcher" role="group" aria-label="View">
+        <button id="v-matrix" type="button" aria-pressed="true">Matrix</button>
+        <button id="v-list" type="button" aria-pressed="false">List</button>
+        <button id="v-table" type="button" aria-pressed="false">Table</button>
+        <button id="v-dashboard" type="button" aria-pressed="false">Dashboard</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="tactic-filters" aria-labelledby="tactic-filter-title">
+    <div class="filter-heading">
+      <strong id="tactic-filter-title">ATT&amp;CK tactics</strong>
+      <button id="tac-all" type="button">Clear tactic filter</button>
+    </div>
+    <div class="tactic-chips" id="tacbar"></div>
+  </section>
+
+  <main class="content-wrap" id="content" tabindex="-1">
+    <div class="resultbar">
+      <p id="result-count" role="status" aria-live="polite">Loading structured playbooks…</p>
+      <div class="active-filter-chips" id="active-filter-chips" aria-label="Active filters"></div>
+      <button id="clear" type="button" hidden>Clear all filters</button>
+      <details class="export-menu" id="export-menu">
+        <summary>Export</summary>
+        <div>
+          <button id="export-filtered-json" type="button">Filtered JSON</button>
+          <button id="export-filtered-markdown" type="button">Filtered Markdown</button>
+          <button id="export-coverage-csv" type="button">Coverage CSV</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="loading" id="loading" aria-hidden="true"><span></span><span></span><span></span></div>
+    <section class="matrix-view" id="matrix" aria-label="ATT&CK matrix view" hidden></section>
+    <section class="list-view" id="list" aria-label="Compact playbook list" hidden></section>
+    <section class="table-view" id="table" aria-label="Playbook coverage table" hidden></section>
+    <section class="dashboard-view" id="dashboard" aria-label="Coverage dashboard" hidden></section>
+
+    <div class="empty-state" id="empty" hidden>
+      <strong>No matching playbooks</strong>
+      <span>Broaden the search or remove one or more filters.</span>
+      <button type="button" id="empty-clear">Clear all filters</button>
+    </div>
+  </main>
+
+  <footer>
+    <span id="foot-count">—</span> structured detection and incident-response playbooks ·
+    <span id="foot-quality">Quality —</span> · MITRE ATT&amp;CK® is a registered trademark of The MITRE Corporation ·
+    <a href="README.md">Documentation</a>
+  </footer>
+
+  <dialog class="playbook-dialog" id="panel" aria-labelledby="p-name">
+    <div class="dialog-shell">
+      <header class="playbook-header">
+        <div class="playbook-eyebrow">
+          <span class="id-badge" id="p-id"></span>
+          <span class="status-badge" id="p-kind"></span>
+          <span class="score-badge" id="p-score"></span>
+          <div class="playbook-actions">
+            <button id="p-save" type="button" aria-pressed="false"><span aria-hidden="true">☆</span><span class="sr-only">Save playbook</span></button>
+            <button id="p-copy" type="button"><span aria-hidden="true">⧉</span><span class="sr-only">Copy playbook link</span></button>
+            <button id="p-print" type="button"><span aria-hidden="true">⌑</span><span class="sr-only">Print playbook</span></button>
+            <button id="p-export-md" type="button"><span aria-hidden="true">MD</span><span class="sr-only">Export playbook as Markdown</span></button>
+            <button id="p-export-json" type="button"><span aria-hidden="true">{ }</span><span class="sr-only">Export playbook as JSON</span></button>
+            <button id="p-close" type="button" aria-label="Close playbook">✕</button>
+          </div>
+        </div>
+        <h2 id="p-name"></h2>
+        <p id="p-description"></p>
+        <div class="playbook-tags" id="p-tags"></div>
+      </header>
+      <div class="playbook-layout">
+        <nav class="section-nav" id="p-toc" aria-label="Playbook sections"></nav>
+        <article class="playbook-body" id="p-body"></article>
+      </div>
+      <nav class="playbook-navigation" aria-label="Adjacent playbooks">
+        <button id="p-prev" type="button">← Previous</button>
+        <span id="p-position" aria-live="polite"></span>
+        <button id="p-next" type="button">Next →</button>
+      </nav>
+    </div>
+  </dialog>
+
+  <dialog class="command-dialog" id="command-palette" aria-labelledby="palette-title">
+    <div class="command-shell">
+      <div class="command-heading">
+        <div>
+          <h2 id="palette-title">Command palette</h2>
+          <p>Run a command or jump directly to a playbook.</p>
+        </div>
+        <button id="command-close" type="button" aria-label="Close command palette">✕</button>
+      </div>
+      <label class="sr-only" for="command-q">Search commands and playbooks</label>
+      <input id="command-q" type="search" placeholder="Type a command, technique ID, or playbook name…" autocomplete="off">
+      <div class="command-results" id="command-results" aria-live="polite"></div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="assets/core.js" defer></script>
+  <script src="assets/app.js" defer></script>
+</body>
+</html>

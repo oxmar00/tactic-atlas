@@ -1,0 +1,232 @@
+id,name,kind,tactics,platforms,severity,confidence,maturity,status,quality_score,telemetry_count,query_count,validation_status,response_completeness,attack_mapping_verified,last_reviewed
+T1001,Data Obfuscation,technique,Command and Control,SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1003,OS Credential Dumping,technique,Credential Access,Windows; IaaS,critical,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1005,Data from Local System,technique,Collection,Windows; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1006,Direct Volume Access,technique,Stealth,Network Devices; Windows,high,high,3,active,91,4,3,planned,100,false,2026-07-12
+T1007,System Service Discovery,technique,Discovery,Windows,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1008,Fallback Channels,technique,Command and Control,SaaS; Network Devices,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1010,Application Window Discovery,technique,Discovery,Windows; SaaS,medium,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1011,Exfiltration Over Other Network Medium,technique,Exfiltration,Linux; macOS; Windows,critical,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1012,Query Registry,technique,Discovery,Windows,medium,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1014,Rootkit,technique,Stealth,Windows; SaaS; ESXi,high,high,3,active,91,8,1,planned,100,false,2026-07-12
+T1016,System Network Configuration Discovery,technique,Discovery,Windows; Network Devices,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1018,Remote System Discovery,technique,Discovery,Windows; SaaS; Network Devices,medium,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1020,Automated Exfiltration,technique,Exfiltration,Windows; Network Devices,critical,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1021,Remote Services,technique,Lateral Movement,Windows; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1025,Data from Removable Media,technique,Collection,Linux; macOS; Windows,high,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1027,Obfuscated Files or Information,technique,Stealth,Windows; Containers; SaaS,high,high,3,active,91,7,2,planned,100,false,2026-07-12
+T1029,Scheduled Transfer,technique,Exfiltration,Windows; Linux; SaaS; Network Devices,critical,high,3,active,93,7,1,planned,100,true,2026-07-12
+T1030,Data Transfer Size Limits,technique,Exfiltration,Linux; macOS; Windows; ESXi,critical,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1033,System Owner/User Discovery,technique,Discovery,Windows; Linux,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1036,Masquerading,technique,Stealth,Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1037,Boot or Logon Initialization Scripts,technique,Persistence; Privilege Escalation,ESXi; Linux; macOS; Network Devices; Windows,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1039,Data from Network Shared Drive,technique,Collection,Windows; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1040,Network Sniffing,technique,Credential Access; Discovery,IaaS; Linux; macOS; Network Devices; Windows; SaaS,critical,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1041,Exfiltration Over C2 Channel,technique,Exfiltration,Network Devices,critical,high,3,active,93,7,1,planned,100,true,2026-07-12
+T1046,Network Service Discovery,technique,Discovery,Windows; SaaS; Network Devices,medium,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1047,Windows Management Instrumentation,technique,Execution,Windows; SaaS; Network Devices,high,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1048,Exfiltration Over Alternative Protocol,technique,Exfiltration,Windows; IaaS; SaaS; Network Devices,critical,high,3,active,93,8,3,planned,100,true,2026-07-12
+T1049,System Network Connections Discovery,technique,Discovery,Windows; Linux,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1052,Exfiltration Over Physical Medium,technique,Exfiltration,Linux; macOS; Windows,critical,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1053,Scheduled Task/Job,technique,Execution; Persistence; Privilege Escalation,Windows; Linux,high,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1055,Process Injection,technique,Stealth; Privilege Escalation,Windows,high,high,3,active,91,4,3,planned,100,false,2026-07-12
+T1056,Input Capture,technique,Collection,Windows; SaaS,high,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1057,Process Discovery,technique,Discovery,Windows; Linux; SaaS,medium,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1059,Command and Scripting Interpreter,technique,Execution,Windows; SaaS; Network Devices,high,high,3,active,93,8,3,planned,100,true,2026-07-12
+T1068,Exploitation for Privilege Escalation,technique,Privilege Escalation,Windows,high,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1069,Permission Groups Discovery,technique,Discovery,Windows; SaaS,medium,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1070,Indicator Removal,technique,Stealth,Windows,high,high,3,active,91,4,3,planned,100,false,2026-07-12
+T1071,Application Layer Protocol,technique,Command and Control,SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1072,Software Deployment Tools,technique,Execution; Lateral Movement,Linux; macOS; Network Devices; SaaS; Windows,high,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1074,Data Staged,technique,Collection,Windows; SaaS,high,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1078,Valid Accounts,technique,Stealth; Persistence; Privilege Escalation; Initial Access,Windows; IaaS; SaaS; Network Devices,high,high,3,active,91,6,3,planned,100,false,2026-07-12
+T1080,Taint Shared Content,technique,Lateral Movement,Windows; SaaS,high,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1082,System Information Discovery,technique,Discovery,Windows,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1083,File and Directory Discovery,technique,Discovery,Windows,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1087,Account Discovery,technique,Discovery,Windows; IaaS; SaaS,medium,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1090,Proxy,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,8,1,planned,100,true,2026-07-12
+T1091,Replication Through Removable Media,technique,Initial Access; Lateral Movement,Windows,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1092,Communication Through Removable Media,technique,Command and Control,Linux; macOS; Windows,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1095,Non-Application Layer Protocol,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1098,Account Manipulation,technique,Persistence; Privilege Escalation,Windows; IaaS; SaaS,high,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1102,Web Service,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1104,Multi-Stage Channels,technique,Command and Control,Windows; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1105,Ingress Tool Transfer,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1106,Native API,technique,Execution,Windows; SaaS,high,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1110,Brute Force,technique,Credential Access,Windows; IaaS; SaaS; Network Devices,critical,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1111,Multi-Factor Authentication Interception,technique,Credential Access,Linux; macOS; Windows; SaaS; Network Devices,critical,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1112,Modify Registry,technique,Stealth,Windows; SaaS; Network Devices,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1113,Screen Capture,technique,Collection,Windows; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1114,Email Collection,technique,Collection,Windows; IaaS; SaaS,high,high,3,active,93,8,3,planned,100,true,2026-07-12
+T1115,Clipboard Data,technique,Collection,Linux; macOS; Windows,high,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1119,Automated Collection,technique,Collection,Windows; Linux; SaaS,high,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1120,Peripheral Device Discovery,technique,Discovery,Linux; macOS; Windows,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1123,Audio Capture,technique,Collection,Linux; macOS; Windows,high,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1124,System Time Discovery,technique,Discovery,ESXi; Linux; macOS; Network Devices; Windows,medium,high,3,active,90,2,2,planned,100,true,2026-07-12
+T1125,Video Capture,technique,Collection,Linux; macOS; Windows,high,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1127,Trusted Developer Utilities Proxy Execution,technique,Stealth; Execution,Windows,high,high,3,active,91,3,3,planned,100,false,2026-07-12
+T1129,Shared Modules,technique,Execution,Linux; macOS; Windows,high,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1132,Data Encoding,technique,Command and Control,SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1133,External Remote Services,technique,Persistence; Initial Access,IaaS; SaaS; Network Devices,high,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1134,Access Token Manipulation,technique,Stealth; Privilege Escalation,Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1135,Network Share Discovery,technique,Discovery,Windows; SaaS; Network Devices,medium,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1136,Create Account,technique,Persistence,Windows; IaaS; SaaS,high,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1137,Office Application Startup,technique,Persistence,Windows; Office Suite; SaaS,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1140,Deobfuscate/Decode Files or Information,technique,Stealth,Windows; SaaS,high,high,3,active,91,6,1,planned,100,false,2026-07-12
+T1176,Software Extensions,technique,Persistence,Windows; SaaS,high,high,3,active,93,7,1,planned,100,true,2026-07-12
+T1185,Browser Session Hijacking,technique,Collection,Windows,high,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1187,Forced Authentication,technique,Credential Access,Windows; Network Devices,critical,high,3,active,93,7,3,planned,100,true,2026-07-12
+T1189,Drive-by Compromise,technique,Initial Access,Windows; SaaS,high,high,3,active,93,8,1,planned,100,true,2026-07-12
+T1190,Exploit Public-Facing Application,technique,Initial Access,Windows; Linux; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1195,Supply Chain Compromise,technique,Initial Access,Windows; SaaS; Network Devices,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1197,BITS Jobs,technique,Stealth; Persistence; Execution,Windows; Network Devices,high,high,3,active,91,6,3,planned,100,false,2026-07-12
+T1199,Trusted Relationship,technique,Initial Access,Windows; Network Devices,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1200,Hardware Additions,technique,Initial Access,Windows; SaaS; Network Devices,high,high,3,active,93,8,1,planned,100,true,2026-07-12
+T1201,Password Policy Discovery,technique,Discovery,Windows; Linux; macOS; IaaS; Network Devices; Identity Provider; SaaS; Office Suite,medium,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1202,Indirect Command Execution,technique,Stealth,Windows,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1203,Exploitation for Client Execution,technique,Execution,Linux; macOS; Windows; SaaS,high,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1204,User Execution,technique,Execution,Windows; Containers; SaaS,high,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1205,Traffic Signaling,technique,Stealth; Persistence; Command and Control,Linux; macOS; Network Devices; Windows,high,high,3,active,91,5,3,planned,100,false,2026-07-12
+T1207,Rogue Domain Controller,technique,Stealth,Windows; Containers; IaaS; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1210,Exploitation of Remote Services,technique,Lateral Movement,Windows; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1211,Exploitation for Stealth,technique,Stealth,Linux; Windows; macOS; SaaS; IaaS,high,high,3,active,91,5,3,planned,100,false,2026-07-12
+T1212,Exploitation for Credential Access,technique,Credential Access,Linux; Windows; macOS; Identity Provider; IaaS,critical,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1213,Data from Information Repositories,technique,Collection,Linux; Windows; macOS; SaaS; IaaS; Office Suite,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1216,System Script Proxy Execution,technique,Stealth,Windows,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1217,Browser Information Discovery,technique,Discovery,Linux; macOS; Windows,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1218,System Binary Proxy Execution,technique,Stealth,Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1219,Remote Access Tools,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1220,XSL Script Processing,technique,Stealth,Windows,high,high,3,active,88,2,2,planned,100,false,2026-07-12
+T1221,Template Injection,technique,Stealth,Windows; SaaS,high,high,3,active,91,7,2,planned,100,false,2026-07-12
+T1222,File and Directory Permissions Modification,technique,Stealth,ESXi; Linux; macOS; Windows,high,high,3,active,91,4,3,planned,100,false,2026-07-12
+T1480,Execution Guardrails,technique,Stealth,ESXi; Linux; macOS; Windows,high,high,3,active,91,4,2,planned,100,false,2026-07-12
+T1482,Domain Trust Discovery,technique,Discovery,Windows; SaaS,medium,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1484,Domain or Tenant Policy Modification,technique,Stealth; Privilege Escalation,Windows; Containers; SaaS; Network Devices,high,high,3,active,91,8,3,planned,100,false,2026-07-12
+T1485,Data Destruction,technique,Impact,Windows; SaaS,critical,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1486,Data Encrypted for Impact,technique,Impact,Windows; SaaS; Network Devices,critical,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1489,Service Stop,technique,Impact,Windows; SaaS,critical,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1490,Inhibit System Recovery,technique,Impact,Windows,critical,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1491,Defacement,technique,Impact,Windows; SaaS,critical,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1495,Firmware Corruption,technique,Impact,Linux; macOS; Network Devices; Windows,critical,high,3,active,90,2,2,planned,100,true,2026-07-12
+T1496,Resource Hijacking,technique,Impact,Windows; Linux; SaaS; Network Devices,critical,high,3,active,93,7,1,planned,100,true,2026-07-12
+T1497,Virtualization/Sandbox Evasion,technique,Stealth; Discovery,Windows; SaaS,high,high,3,active,91,7,1,planned,100,false,2026-07-12
+T1498,Network Denial of Service,technique,Impact,SaaS; Network Devices,critical,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1499,Endpoint Denial of Service,technique,Impact,Windows; Linux; macOS; Containers; IaaS,critical,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1505,Server Software Component,technique,Persistence,Windows; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1518,Software Discovery,technique,Discovery,Windows; Network Devices,medium,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1525,Implant Internal Image,technique,Persistence,IaaS; Containers; Windows; SaaS,high,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1526,Cloud Service Discovery,technique,Discovery,IaaS; Identity Provider; Office Suite; SaaS,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1528,Steal Application Access Token,technique,Credential Access,Windows; IaaS; SaaS; Network Devices,critical,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1529,System Shutdown/Reboot,technique,Impact,Windows; SaaS; Network Devices,critical,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1530,Data from Cloud Storage,technique,Collection,IaaS; Office Suite; SaaS; Windows; Network Devices,high,high,3,active,93,5,3,planned,100,true,2026-07-12
+T1531,Account Access Removal,technique,Impact,Windows; IaaS; SaaS,critical,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1534,Internal Spearphishing,technique,Lateral Movement,Linux; macOS; Office Suite; SaaS; Windows; Network Devices,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1535,Unused/Unsupported Cloud Regions,technique,Stealth,IaaS; SaaS,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1537,Transfer Data to Cloud Account,technique,Exfiltration,Windows; Containers; IaaS; SaaS,critical,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1538,Cloud Service Dashboard,technique,Discovery,IaaS; SaaS; Office Suite; Identity Provider; Network Devices,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1539,Steal Web Session Cookie,technique,Credential Access,Windows; IaaS,critical,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1542,Pre-OS Boot,technique,Persistence; Stealth,Windows,high,high,3,active,91,5,1,planned,100,false,2026-07-12
+T1543,Create or Modify System Process,technique,Persistence; Privilege Escalation,Windows; SaaS,high,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1546,Event Triggered Execution,technique,Persistence; Privilege Escalation,Windows; SaaS,high,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1547,Boot or Logon Autostart Execution,technique,Persistence; Privilege Escalation,Windows; SaaS,high,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1548,Abuse Elevation Control Mechanism,technique,Privilege Escalation; Stealth,Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1550,Use Alternate Authentication Material,technique,Stealth; Lateral Movement,Windows; SaaS,high,high,3,active,91,7,2,planned,100,false,2026-07-12
+T1552,Unsecured Credentials,technique,Credential Access,Windows; Linux; Containers; IaaS; SaaS,critical,high,3,active,93,8,3,planned,100,true,2026-07-12
+T1553,Subvert Trust Controls,technique,Stealth,Windows; Containers,high,high,3,active,91,4,1,planned,100,false,2026-07-12
+T1554,Compromise Host Software Binary,technique,Persistence,ESXi; Linux; macOS; Windows,high,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1555,Credentials from Password Stores,technique,Credential Access,Windows; SaaS; Network Devices,critical,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1556,Modify Authentication Process,technique,Credential Access; Stealth; Persistence,Windows; SaaS; Network Devices,critical,high,3,active,91,5,3,planned,100,false,2026-07-12
+T1557,Adversary-in-the-Middle,technique,Credential Access; Collection,Windows,critical,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1558,Steal or Forge Kerberos Tickets,technique,Credential Access,Windows; Linux; SaaS,critical,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1559,Inter-Process Communication,technique,Execution,Windows; SaaS,high,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1560,Archive Collected Data,technique,Collection,Windows; SaaS; Network Devices,high,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1561,Disk Wipe,technique,Impact,Windows; SaaS,critical,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1562,Impair Defenses,technique,Defense Impairment,Windows; SaaS; Network Devices,high,high,3,deprecated,91,8,3,planned,100,false,2026-07-12
+T1563,Remote Service Session Hijacking,technique,Lateral Movement,Windows; SaaS; Network Devices,high,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1564,Hide Artifacts,technique,Stealth,Windows; SaaS,high,high,3,active,91,5,1,planned,100,false,2026-07-12
+T1565,Data Manipulation,technique,Impact,SaaS,critical,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1566,Phishing,technique,Initial Access,Windows; Containers; SaaS; Network Devices,high,high,3,active,93,8,3,planned,100,true,2026-07-12
+T1567,Exfiltration Over Web Service,technique,Exfiltration,Windows; IaaS; SaaS,critical,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1568,Dynamic Resolution,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1569,System Services,technique,Execution,Windows; SaaS,high,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1570,Lateral Tool Transfer,technique,Lateral Movement,Windows; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1571,Non-Standard Port,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,7,1,planned,100,true,2026-07-12
+T1572,Protocol Tunneling,technique,Command and Control,Windows; SaaS; Network Devices,high,high,3,active,93,8,2,planned,100,true,2026-07-12
+T1573,Encrypted Channel,technique,Command and Control,SaaS; Network Devices,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1574,Hijack Execution Flow,technique,Persistence; Privilege Escalation; Stealth,Windows; SaaS,high,high,3,active,91,7,2,planned,100,false,2026-07-12
+T1578,Modify Cloud Compute Infrastructure,technique,Stealth,IaaS; SaaS,high,high,3,active,91,6,1,planned,100,false,2026-07-12
+T1580,Cloud Infrastructure Discovery,technique,Discovery,IaaS; SaaS,medium,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1583,Acquire Infrastructure,technique,Resource Development,External; Containers; SaaS; Network Devices,medium,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1584,Compromise Infrastructure,technique,Resource Development,External; Windows; SaaS; Network Devices,medium,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1585,Establish Accounts,technique,Resource Development,External; Windows; SaaS,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1586,Compromise Accounts,technique,Resource Development,External; SaaS,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1587,Develop Capabilities,technique,Resource Development,External; Windows,medium,high,3,active,90,2,1,planned,100,true,2026-07-12
+T1588,Obtain Capabilities,technique,Resource Development,External; Windows,medium,high,3,active,90,2,2,planned,100,true,2026-07-12
+T1589,Gather Victim Identity Information,technique,Reconnaissance,External; SaaS; Network Devices,medium,high,3,active,93,6,2,planned,100,true,2026-07-12
+T1590,Gather Victim Network Information,technique,Reconnaissance,External; SaaS; Network Devices,medium,high,3,active,93,7,3,planned,100,true,2026-07-12
+T1591,Gather Victim Org Information,technique,Reconnaissance,External; SaaS,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1592,Gather Victim Host Information,technique,Reconnaissance,External,medium,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1593,Search Open Websites/Domains,technique,Reconnaissance,External; IaaS,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1594,Search Victim-Owned Websites,technique,Reconnaissance,External,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1595,Active Scanning,technique,Reconnaissance,SaaS; Network Devices,medium,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1596,Search Open Technical Databases,technique,Reconnaissance,External,medium,high,3,active,93,3,1,planned,100,true,2026-07-12
+T1597,Search Closed Sources,technique,Reconnaissance,External; Network Devices,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1598,Phishing for Information,technique,Reconnaissance,IaaS; SaaS,medium,high,3,active,93,5,1,planned,100,true,2026-07-12
+T1599,Network Boundary Bridging,technique,Stealth,Network Devices,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1600,Weaken Encryption,technique,Stealth,Network Devices,high,high,3,active,88,2,1,planned,100,false,2026-07-12
+T1601,Modify System Image,technique,Stealth,Network Devices,high,high,3,active,88,2,1,planned,100,false,2026-07-12
+T1602,Data from Configuration Repository,technique,Collection,Network Devices,high,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1606,Forge Web Credentials,technique,Credential Access,Windows; Containers; IaaS; SaaS,critical,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1608,Stage Capabilities,technique,Resource Development,External,medium,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1609,Container Administration Command,technique,Execution,Containers; Windows; Linux,high,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1610,Deploy Container,technique,Execution; Stealth,Containers; Windows; SaaS,high,high,3,active,91,4,3,planned,100,false,2026-07-12
+T1611,Escape to Host,technique,Privilege Escalation,Windows; Containers; SaaS,high,high,3,active,93,6,1,planned,100,true,2026-07-12
+T1612,Build Image on Host,technique,Stealth,Containers; Windows,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1613,Container and Resource Discovery,technique,Discovery,Containers; Windows,medium,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1614,System Location Discovery,technique,Discovery,IaaS; Linux; macOS; Windows,medium,high,3,active,90,2,2,planned,100,true,2026-07-12
+T1615,Group Policy Discovery,technique,Discovery,Windows; Containers,medium,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1619,Cloud Storage Object Discovery,technique,Discovery,IaaS; Containers; SaaS,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1620,Reflective Code Loading,technique,Stealth,Windows; SaaS,high,high,3,active,91,6,1,planned,100,false,2026-07-12
+T1621,Multi-Factor Authentication Request Generation,technique,Credential Access,IaaS; Network Devices,critical,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1622,Debugger Evasion,technique,Stealth; Discovery,Linux; macOS; Windows,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1647,Plist File Modification,technique,Stealth,macOS,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1648,Serverless Execution,technique,Execution,SaaS; IaaS; Office Suite; Network Devices,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1649,Steal or Forge Authentication Certificates,technique,Credential Access,Windows; IaaS; SaaS,critical,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1650,Acquire Access,technique,Resource Development,External; Network Devices,medium,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1651,Cloud Administration Command,technique,Execution,IaaS; SaaS,high,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1652,Device Driver Discovery,technique,Discovery,Linux; macOS; Windows,medium,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1653,Power Settings,technique,Persistence,Windows; Linux; macOS; Network Devices,high,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1654,Log Enumeration,technique,Discovery,ESXi; IaaS; Linux; macOS; Windows; SaaS,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1656,Impersonation,technique,Stealth,SaaS; Network Devices,high,high,3,deprecated,91,5,1,planned,100,false,2026-07-12
+T1657,Financial Theft,technique,Impact,Linux; macOS; Office Suite; SaaS; Windows,critical,high,3,active,93,3,3,planned,100,true,2026-07-12
+T1659,Content Injection,technique,Initial Access; Command and Control,Linux; macOS; Windows; Network Devices,high,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1665,Hide Infrastructure,technique,Command and Control,ESXi; Linux; macOS; Network Devices; Windows,high,high,3,active,93,5,2,planned,100,true,2026-07-12
+T1666,Modify Cloud Resource Hierarchy,technique,Stealth,IaaS; SaaS,high,high,3,active,88,2,1,planned,100,false,2026-07-12
+T1667,Email Bombing,technique,Impact,Linux; Office Suite; Windows; macOS; SaaS,critical,high,3,active,90,2,3,planned,100,true,2026-07-12
+T1668,Exclusive Control,technique,Persistence,Linux; macOS; Windows,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1669,Wi-Fi Networks,technique,Initial Access,Linux; Network Devices; Windows; macOS,high,high,3,active,93,4,4,planned,100,true,2026-07-12
+T1671,Cloud Application Integration,technique,Persistence,Office Suite; SaaS; IaaS,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1673,Virtual Machine Discovery,technique,Discovery,ESXi; Linux; macOS; Windows,medium,high,3,active,93,3,2,planned,100,true,2026-07-12
+T1674,Input Injection,technique,Execution,Windows; macOS; Linux,high,high,3,active,93,6,3,planned,100,true,2026-07-12
+T1675,ESXi Administration Command,technique,Execution,ESXi; Linux,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1677,Poisoned Pipeline Execution,technique,Execution,SaaS; Windows; IaaS; Network Devices,high,high,3,active,93,4,3,planned,100,true,2026-07-12
+T1678,Delay Execution,technique,Stealth,Linux; macOS; Windows,high,high,3,active,91,3,3,planned,100,false,2026-07-12
+T1679,Selective Exclusion,technique,Stealth,Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1680,Local Storage Discovery,technique,Discovery,ESXi; IaaS; Linux; macOS; Windows,medium,high,3,active,93,4,2,planned,100,true,2026-07-12
+T1681,Search Threat Vendor Data,technique,Reconnaissance,External,medium,high,3,active,93,4,1,planned,100,true,2026-07-12
+T1682,Query Public AI Services,technique,Reconnaissance,External; SaaS; Network Devices,medium,high,3,active,93,7,2,planned,100,true,2026-07-12
+T1683,Generate Content,technique,Resource Development,External; SaaS,medium,high,3,active,90,2,1,planned,100,true,2026-07-12
+T1684,Social Engineering,technique,Stealth,Linux; macOS; Office Suite; SaaS; Windows,high,high,3,active,91,3,2,planned,100,false,2026-07-12
+T1685,Disable or Modify Tools,technique,Defense Impairment,Containers; ESXi; IaaS; Linux; macOS; Network Devices; Windows,high,high,3,active,91,7,3,planned,100,false,2026-07-12
+T1686,Disable or Modify System Firewall,technique,Defense Impairment,ESXi; Linux; macOS; Network Devices; Windows; SaaS,high,high,3,active,91,6,2,planned,100,false,2026-07-12
+T1687,Exploitation for Defense Impairment,technique,Defense Impairment,IaaS; Linux; macOS; SaaS; Windows,high,high,3,active,91,5,2,planned,100,false,2026-07-12
+T1688,Safe Mode Boot,technique,Defense Impairment,Windows,high,high,3,active,91,5,3,planned,100,false,2026-07-12
+T1689,Downgrade Attack,technique,Defense Impairment,macOS; Windows; Linux,high,high,3,active,91,5,3,planned,100,false,2026-07-12
+T1690,Prevent Command History Logging,technique,Defense Impairment,ESXi; Linux; macOS; Network Devices; Windows,high,high,3,active,91,6,3,planned,100,false,2026-07-12
+PB-PHISH-001,Phishing Alert Triage (Cisco ESA & FortiMail),operational,,Windows; Containers; SaaS; Network Devices,high,high,3,active,92,8,5,planned,100,true,2026-07-12
+PB-RANSOM-001,Ransomware Operations (Full Kill-Chain),operational,,Windows; IaaS; SaaS; Network Devices,high,high,3,active,92,8,3,planned,100,true,2026-07-12
+PB-SCAN-001,Network Scanning (External and Internal),operational,,Windows; SaaS; Network Devices,high,high,3,active,92,8,3,planned,100,true,2026-07-12
+PB-EPP-KASPERSKY,Kaspersky Endpoint Security (KES) / Kaspersky Security Center — Detection & Response,platform,,Windows; Containers; SaaS; Network Devices,high,high,3,active,92,7,5,planned,100,true,2026-07-12
+PB-EPP-SYMANTEC,Symantec Endpoint Protection (SEP) / Broadcom Endpoint Security — Detection & Response,platform,,Windows; SaaS; Network Devices,high,high,3,active,92,6,5,planned,100,true,2026-07-12
+PB-EPP-TRELLIX,Trellix Endpoint Security (formerly McAfee ENS / FireEye HX) — Detection & Response,platform,,Windows; SaaS; Network Devices,high,high,3,active,92,8,5,planned,100,true,2026-07-12
+PB-EPP-TRENDMICRO,Trend Micro Apex One / Vision One — Detection & Response,platform,,Windows; SaaS,high,high,3,active,92,6,5,planned,100,true,2026-07-12

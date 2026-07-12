@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/attack-playbook-console/playbooks.schema.json",
+  "title": "ATT&CK Playbook Console v4 dataset",
+  "type": "object",
+  "required": [
+    "meta",
+    "playbooks"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "content_version",
+        "generated",
+        "counts",
+        "tactic_order",
+        "attack",
+        "quality_model"
+      ]
+    },
+    "playbooks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/playbook"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "playbook": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "id",
+        "name",
+        "kind",
+        "description",
+        "tactics",
+        "tactic_mappings",
+        "techniques",
+        "subtechniques",
+        "platforms",
+        "data_source_summary",
+        "telemetry_requirements",
+        "detection",
+        "queries",
+        "validation",
+        "response",
+        "lifecycle",
+        "tags",
+        "severity",
+        "confidence",
+        "maturity",
+        "status",
+        "quality_score",
+        "quality_breakdown",
+        "coverage",
+        "content_sections",
+        "search_terms"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "4.0.0"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "technique",
+            "operational",
+            "platform"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 40
+        },
+        "tactics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tactic_mappings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "techniques": {
+          "type": "array"
+        },
+        "subtechniques": {
+          "type": "array"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "telemetry_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "category",
+              "tier",
+              "priority",
+              "event_types",
+              "raw_fields",
+              "normalized_fields"
+            ]
+          }
+        },
+        "detection": {
+          "type": "object",
+          "required": [
+            "objective",
+            "hypothesis",
+            "strategy",
+            "strategies",
+            "maturity_levels"
+          ]
+        },
+        "queries": {
+          "type": "array",
+          "minItems": 1
+        },
+        "validation": {
+          "type": "object"
+        },
+        "response": {
+          "type": "object"
+        },
+        "lifecycle": {
+          "type": "object"
+        },
+        "severity": {
+          "enum": [
+            "informational",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "maturity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "testing",
+            "pilot",
+            "active",
+            "production",
+            "deprecated",
+            "retired"
+          ]
+        },
+        "quality_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "quality_breakdown": {
+          "type": "object"
+        },
+        "coverage": {
+          "type": "object"
+        },
+        "content_sections": {
+          "type": "array",
+          "minItems": 1
+        },
+        "search_terms": {
+          "type": "array",
+          "minItems": 3
+        }
+      }
+    }
+  }
+}

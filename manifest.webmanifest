@@ -1,0 +1,29 @@
+{
+  "id": "./",
+  "name": "ATT&CK Playbook Console",
+  "short_name": "Playbooks",
+  "description": "Offline detection engineering, threat hunting, and incident-response playbooks mapped to MITRE ATT&CK Enterprise.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b0f17",
+  "categories": ["security", "productivity"],
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Browse playbooks",
+      "short_name": "Browse",
+      "url": "./"
+    }
+  ]
+}
