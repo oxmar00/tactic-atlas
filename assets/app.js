@@ -36,8 +36,6 @@
     searchTimer: 0,
     toastTimer: 0,
     theme: "dark",
-    font: "medium",
-    width: "comfortable",
     swRegistration: null,
     refreshing: false
   };
@@ -46,12 +44,11 @@
     "q", "kind", "technique", "platform", "source", "severity", "maturity", "status", "sort",
     "favorites", "recent", "v-matrix", "v-list", "v-table", "v-dashboard", "tac-all", "tacbar",
     "clear", "empty-clear", "result-count", "active-filter-chips", "loading", "matrix", "list", "table", "dashboard", "empty",
-    "theme", "font-size", "reading-width", "command-button", "data-version", "data-freshness", "foot-count",
+    "theme", "command-button", "data-version", "data-freshness", "foot-count",
     "foot-quality", "panel", "p-id", "p-kind", "p-score", "p-name", "p-description", "p-tags", "p-toc",
     "p-body", "p-save", "p-copy", "p-print", "p-export-md", "p-export-json", "p-close", "p-prev", "p-next",
     "p-position", "command-palette", "command-q", "command-results", "command-close", "toast", "offline-banner",
-    "update-banner", "update-reload", "update-dismiss", "export-filtered-json", "export-filtered-markdown",
-    "export-coverage-csv"
+    "update-banner", "update-reload", "update-dismiss"
   ];
   const ui = {};
   const lazySections = new WeakMap();
@@ -133,8 +130,6 @@
     ui["empty-clear"].addEventListener("click", clearFilters);
     document.addEventListener("click", handleContentClick);
     ui.theme.addEventListener("click", toggleTheme);
-    ui["font-size"].addEventListener("click", cycleFont);
-    ui["reading-width"].addEventListener("click", cycleWidth);
     ui["command-button"].addEventListener("click", openCommandPalette);
     ui["command-close"].addEventListener("click", closeCommandPalette);
     ui["command-q"].addEventListener("input", renderCommandResults);
@@ -152,9 +147,6 @@
     ui["p-prev"].addEventListener("click", () => navigatePanel(-1));
     ui["p-next"].addEventListener("click", () => navigatePanel(1));
     ui["p-toc"].addEventListener("click", navigateTableOfContents);
-    ui["export-filtered-json"].addEventListener("click", exportFilteredJson);
-    ui["export-filtered-markdown"].addEventListener("click", exportFilteredMarkdown);
-    ui["export-coverage-csv"].addEventListener("click", exportCoverageCsv);
     ui["update-reload"].addEventListener("click", activateUpdate);
     ui["update-dismiss"].addEventListener("click", () => { ui["update-banner"].hidden = true; });
     window.addEventListener("online", updateOnlineState);
@@ -1003,41 +995,13 @@
     toast("JSON export created");
   }
 
-  function closeExportMenu() {
-    const menu = document.getElementById("export-menu");
-    if (menu) menu.open = false;
-  }
-
-  function exportFilteredJson() {
-    downloadText(Core.safeFilename("attack-playbooks-filtered", "json"), Core.serializePlaybooksJson(state.filtered, state.data.meta), "application/json");
-    closeExportMenu();
-    toast(`${state.filtered.length} playbooks exported as JSON`);
-  }
-
-  function exportFilteredMarkdown() {
-    const header = `# TacticAtlas — filtered export\n\nGenerated from content version ${state.data.meta.content_version}. Playbooks: ${state.filtered.length}.\n\n`;
-    const body = state.filtered.map(Core.serializePlaybookMarkdown).join("\n---\n\n");
-    downloadText(Core.safeFilename("attack-playbooks-filtered", "md"), `${header}${body}`, "text/markdown");
-    closeExportMenu();
-    toast(`${state.filtered.length} playbooks exported as Markdown`);
-  }
-
-  function exportCoverageCsv() {
-    downloadText(Core.safeFilename("attack-playbook-coverage", "csv"), Core.serializeCoverageCsv(state.filtered), "text/csv");
-    closeExportMenu();
-    toast(`${state.filtered.length} coverage rows exported`);
-  }
-
   const COMMANDS = [
     { id: "view-dashboard", label: "Open coverage dashboard", keywords: "coverage quality metrics", run: () => setView("dashboard") },
     { id: "view-matrix", label: "Open ATT&CK matrix", keywords: "tactics techniques", run: () => setView("matrix") },
     { id: "view-table", label: "Open coverage table", keywords: "list grid", run: () => setView("table") },
     { id: "view-list", label: "Open compact list", keywords: "rows", run: () => setView("list") },
     { id: "clear", label: "Clear all search and filters", keywords: "reset", run: clearFilters },
-    { id: "theme", label: "Toggle light or dark theme", keywords: "appearance", run: toggleTheme },
-    { id: "export-json", label: "Export filtered results as JSON", keywords: "download", run: exportFilteredJson },
-    { id: "export-markdown", label: "Export filtered results as Markdown", keywords: "download md", run: exportFilteredMarkdown },
-    { id: "export-csv", label: "Export coverage as CSV", keywords: "download spreadsheet", run: exportCoverageCsv }
+    { id: "theme", label: "Toggle light or dark theme", keywords: "appearance", run: toggleTheme }
   ];
 
   function openCommandPalette() {
@@ -1138,8 +1102,6 @@
       const saved = JSON.parse(localStorage.getItem(STORE) || localStorage.getItem(LEGACY_STORE) || "{}");
       if (["matrix", "list", "table", "dashboard"].includes(saved.view)) state.preferredView = saved.view;
       if (["dark", "light"].includes(saved.theme)) state.theme = saved.theme;
-      if (["small", "medium", "large"].includes(saved.font)) state.font = saved.font;
-      if (["compact", "comfortable", "wide"].includes(saved.width)) state.width = saved.width;
       state.favorites = new Set(Array.isArray(saved.favorites) ? saved.favorites.filter(value => typeof value === "string").slice(0, 500) : []);
       state.recent = Array.isArray(saved.recent) ? saved.recent.filter(value => typeof value === "string").slice(0, RECENT_LIMIT) : [];
     } catch { /* Storage can be unavailable or contain invalid data; use bounded defaults. */ }
@@ -1150,8 +1112,6 @@
       localStorage.setItem(STORE, JSON.stringify({
         view: state.preferredView,
         theme: state.theme,
-        font: state.font,
-        width: state.width,
         favorites: [...state.favorites].slice(0, 500),
         recent: state.recent.slice(0, RECENT_LIMIT)
       }));
@@ -1160,8 +1120,6 @@
 
   function applyAppearance() {
     document.documentElement.dataset.theme = state.theme;
-    document.documentElement.dataset.font = state.font;
-    document.documentElement.dataset.width = state.width;
     const light = state.theme === "light";
     ui.theme?.setAttribute("aria-label", light ? "Use dark theme" : "Use light theme");
     const themeColor = document.querySelector('meta[name="theme-color"]');
@@ -1173,22 +1131,6 @@
     applyAppearance();
     savePreferences();
     toast(`${humanize(state.theme)} theme enabled`);
-  }
-
-  function cycleFont() {
-    const values = ["small", "medium", "large"];
-    state.font = values[(values.indexOf(state.font) + 1) % values.length];
-    applyAppearance();
-    savePreferences();
-    toast(`${humanize(state.font)} text enabled`);
-  }
-
-  function cycleWidth() {
-    const values = ["compact", "comfortable", "wide"];
-    state.width = values[(values.indexOf(state.width) + 1) % values.length];
-    applyAppearance();
-    savePreferences();
-    toast(`${humanize(state.width)} reading width enabled`);
   }
 
   function renderDatasetMeta() {

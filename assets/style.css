@@ -52,11 +52,6 @@
   --shadow-soft: 0 8px 24px rgba(31, 47, 72, .1);
 }
 
-:root[data-font="small"] { --base-font: 14px; }
-:root[data-font="large"] { --base-font: 17px; }
-:root[data-width="compact"] { --reading-width: 62ch; }
-:root[data-width="wide"] { --reading-width: 96ch; }
-
 * { box-sizing: border-box; }
 html { min-height: 100%; scroll-behavior: smooth; }
 body {
@@ -288,13 +283,6 @@ button, select, input { accent-color: var(--accent); }
 .active-filter-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .active-filter-chip:hover { border-color: var(--accent-2); color: var(--text); }
 .active-filter-remove { display: grid; place-items: center; width: 1.15rem; height: 1.15rem; border-radius: 50%; background: var(--surface-3); color: var(--accent-2); font: 800 .8rem/1 var(--sans); }
-.export-menu { position: relative; margin-left: auto; }
-.export-menu > summary { min-height: 2.2rem; padding: .38rem .7rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); color: var(--muted); font: .72rem/1.4 var(--mono); cursor: pointer; list-style: none; }
-.export-menu > summary::-webkit-details-marker { display: none; }
-.export-menu[open] > summary { border-color: var(--accent); color: var(--accent); }
-.export-menu > div { position: absolute; z-index: 20; top: calc(100% + .35rem); right: 0; display: grid; min-width: 12rem; padding: .35rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface); box-shadow: var(--shadow); }
-.export-menu button { min-height: 2.4rem; padding: .45rem .65rem; border: 0; border-radius: .4rem; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
-.export-menu button:hover { background: var(--surface-3); }
 .loading { display: flex; justify-content: center; gap: .5rem; padding: 6rem 0; }
 .loading span { width: .65rem; height: .65rem; border-radius: 50%; background: var(--accent); animation: loading-pulse .9s infinite alternate; }
 .loading span:nth-child(2) { animation-delay: .18s; }
@@ -545,7 +533,6 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
   .brand-copy h1 { font-size: 1rem; }
   .header-actions { gap: .25rem; }
   .icon-button { min-width: 2.35rem; min-height: 2.35rem; }
-  #font-size, #reading-width { display: none; }
   .quick-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-controls { width: min(calc(100% - 1rem), 108rem); margin-top: .5rem; padding: .65rem; }
   .control-row { display: grid; }

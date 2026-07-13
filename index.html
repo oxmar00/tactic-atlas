@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark" data-font="medium" data-width="comfortable">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -44,10 +44,8 @@
         <span id="data-version">Version —</span>
         <span id="data-freshness">Updated —</span>
       </div>
-      <div class="header-actions" aria-label="Display and command controls">
+      <div class="header-actions" aria-label="Command and theme controls">
         <button class="icon-button" id="command-button" type="button" aria-label="Open command palette" title="Command palette (Ctrl or Command + K)"><span aria-hidden="true">⌘K</span></button>
-        <button class="icon-button" id="font-size" type="button" aria-label="Change text size" title="Change text size"><span aria-hidden="true">A</span></button>
-        <button class="icon-button" id="reading-width" type="button" aria-label="Change playbook reading width" title="Change reading width"><span aria-hidden="true">↔</span></button>
         <button class="icon-button" id="theme" type="button" aria-label="Use light theme" title="Toggle theme"><span aria-hidden="true">◐</span></button>
       </div>
     </div>
@@ -100,14 +98,6 @@
       <p id="result-count" role="status" aria-live="polite">Loading structured playbooks…</p>
       <div class="active-filter-chips" id="active-filter-chips" aria-label="Active filters"></div>
       <button id="clear" type="button" hidden>Clear all filters</button>
-      <details class="export-menu" id="export-menu">
-        <summary>Export</summary>
-        <div>
-          <button id="export-filtered-json" type="button">Filtered JSON</button>
-          <button id="export-filtered-markdown" type="button">Filtered Markdown</button>
-          <button id="export-coverage-csv" type="button">Coverage CSV</button>
-        </div>
-      </details>
     </div>
 
     <div class="loading" id="loading" aria-hidden="true"><span></span><span></span><span></span></div>
