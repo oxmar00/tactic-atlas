@@ -165,7 +165,7 @@ See `SECURITY.md` for reporting and deployment guidance.
 
 The workflow verifies pull requests and deploys only a successful `main` build. It installs from the lockfile, validates data and application assets, runs tests and the content audit, regenerates the standalone artifact, rejects drift, performs a dependency audit, and uploads only runtime files.
 
-In repository settings, choose **GitHub Actions** as the Pages source. The public site is designed for `https://galva0101.github.io/tactic-atlas/`.
+In repository settings, choose **GitHub Actions** as the Pages source. The public site is designed for `https://oxmar00.github.io/tactic-atlas/`.
 
 ## Troubleshooting
 
