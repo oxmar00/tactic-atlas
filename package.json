@@ -1,9 +1,9 @@
 {
-  "name": "attack-playbook-console",
+  "name": "tactic-atlas",
   "version": "4.0.0",
   "private": true,
   "type": "module",
-  "description": "Static MITRE ATT&CK detection and incident-response playbook console",
+  "description": "TacticAtlas: a static MITRE ATT&CK detection and incident-response playbook workspace",
   "scripts": {
     "validate": "node scripts/validate.mjs",
     "test": "node scripts/check.mjs --test",

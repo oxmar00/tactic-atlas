@@ -698,8 +698,8 @@ function coverageCsv(data) {
 function schemaDocument() {
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema",
-    $id: "https://example.invalid/attack-playbook-console/playbooks.schema.json",
-    title: "ATT&CK Playbook Console v4 dataset",
+    $id: "https://example.invalid/tactic-atlas/playbooks.schema.json",
+    title: "TacticAtlas v4 dataset",
     type: "object",
     required: ["meta", "playbooks"],
     properties: {

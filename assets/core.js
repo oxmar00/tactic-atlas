@@ -1,4 +1,4 @@
-// ATT&CK Playbook Console v4 — dependency-free, DOM-free application core.
+// TacticAtlas v4 — dependency-free, DOM-free application core.
 (() => {
   "use strict";
 

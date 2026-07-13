@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "ATT&CK Playbook Console",
-  "short_name": "Playbooks",
+  "name": "TacticAtlas",
+  "short_name": "TacticAtlas",
   "description": "Offline detection engineering, threat hunting, and incident-response playbooks mapped to MITRE ATT&CK Enterprise.",
   "lang": "en",
   "dir": "ltr",

@@ -1,7 +1,8 @@
 "use strict";
 
 const APP_VERSION = "4.0.0";
-const CACHE_PREFIX = "attack-playbook-console-";
+const CACHE_PREFIX = "tactic-atlas-";
+const LEGACY_CACHE_PREFIXES = ["attack-playbook-console-"];
 const SHELL_CACHE = `${CACHE_PREFIX}${APP_VERSION}-shell`;
 const DATA_CACHE = `${CACHE_PREFIX}${APP_VERSION}-data`;
 const SCOPE_URL = new URL("./", self.registration.scope);
@@ -63,7 +64,7 @@ self.addEventListener("activate", event => {
     const current = new Set([SHELL_CACHE, DATA_CACHE]);
     const keys = await caches.keys();
     await Promise.all(keys
-      .filter(key => key.startsWith(CACHE_PREFIX) && !current.has(key))
+      .filter(key => [CACHE_PREFIX, ...LEGACY_CACHE_PREFIXES].some(prefix => key.startsWith(prefix)) && !current.has(key))
       .map(key => caches.delete(key)));
     await self.clients.claim();
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

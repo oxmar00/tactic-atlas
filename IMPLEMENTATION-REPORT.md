@@ -1,4 +1,4 @@
-# ATT&CK Playbook Console v4 — implementation report
+# TacticAtlas v4 — implementation report
 
 Date: 2026-07-12  
 Source release: v3.0.0  
@@ -10,7 +10,7 @@ The production ZIP, standalone air-gapped edition, this report, and SHA-256 mani
 
 ## B. Executive summary
 
-ATT&CK Playbook Console v3 was rebuilt as a static, offline-capable detection engineering, threat-hunting, and incident-response workspace. All 231 supplied records were migrated from runtime HTML into schema-versioned, text-only structured JSON. Each record now exposes operational telemetry, implementable detection guidance, vendor-neutral queries, safe validation, complete response phases, lifecycle metadata, coverage, and a transparent quality score.
+The original ATT&CK Playbook Console v3 was rebuilt as TacticAtlas, a static, offline-capable detection engineering, threat-hunting, and incident-response workspace. All 231 supplied records were migrated from runtime HTML into schema-versioned, text-only structured JSON. Each record now exposes operational telemetry, implementable detection guidance, vendor-neutral queries, safe validation, complete response phases, lifecycle metadata, coverage, and a transparent quality score.
 
 The user interface now provides ranked full-content search, fuzzy matching, eight facets, ATT&CK tactic filters, individually removable filter chips, saved and recently viewed records, matrix/list/table/dashboard views, shareable URL state, a command palette, lazy-rendered playbook details, safe exports, print support, dark/light themes, reading controls, responsive phone layouts, and offline updates.
 

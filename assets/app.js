@@ -1,9 +1,10 @@
-// ATT&CK Playbook Console v4 — structured, dependency-free browser client.
+// TacticAtlas v4 — structured, dependency-free browser client.
 (() => {
   "use strict";
 
   const Core = globalThis.PlaybookCore;
-  const STORE = "attack-playbook-console:v4";
+  const STORE = "tactic-atlas:v4";
+  const LEGACY_STORE = "attack-playbook-console:v4";
   const RECENT_LIMIT = 16;
   const VIEW_IDS = { matrix: "v-matrix", list: "v-list", table: "v-table", dashboard: "v-dashboard" };
   const FILTER_IDS = ["kind", "technique", "platform", "source", "severity", "maturity", "status", "sort"];
@@ -1014,7 +1015,7 @@
   }
 
   function exportFilteredMarkdown() {
-    const header = `# ATT&CK Playbook Console — filtered export\n\nGenerated from content version ${state.data.meta.content_version}. Playbooks: ${state.filtered.length}.\n\n`;
+    const header = `# TacticAtlas — filtered export\n\nGenerated from content version ${state.data.meta.content_version}. Playbooks: ${state.filtered.length}.\n\n`;
     const body = state.filtered.map(Core.serializePlaybookMarkdown).join("\n---\n\n");
     downloadText(Core.safeFilename("attack-playbooks-filtered", "md"), `${header}${body}`, "text/markdown");
     closeExportMenu();
@@ -1134,7 +1135,7 @@
 
   function restorePreferences() {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+      const saved = JSON.parse(localStorage.getItem(STORE) || localStorage.getItem(LEGACY_STORE) || "{}");
       if (["matrix", "list", "table", "dashboard"].includes(saved.view)) state.preferredView = saved.view;
       if (["dark", "light"].includes(saved.theme)) state.theme = saved.theme;
       if (["small", "medium", "large"].includes(saved.font)) state.font = saved.font;

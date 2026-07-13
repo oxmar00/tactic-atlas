@@ -1,6 +1,6 @@
-# ATT&CK Playbook Console
+# TacticAtlas
 
-ATT&CK Playbook Console is a static, offline-capable detection engineering, threat-hunting, and incident-response library. It ships 231 structured playbooks for SOC analysts, detection engineers, DFIR teams, incident responders, and security-platform owners without requiring a backend, account, remote API, or runtime dependency.
+TacticAtlas is a static, offline-capable detection engineering, threat-hunting, and incident-response library. It ships 231 structured playbooks for SOC analysts, detection engineers, DFIR teams, incident responders, and security-platform owners without requiring a backend, account, remote API, or runtime dependency.
 
 Version 4 replaces executable content markup with a versioned JSON model. The browser constructs every playbook with DOM APIs and text nodes; legacy HTML is converted during migration and is not rendered at runtime.
 
@@ -165,7 +165,7 @@ See `SECURITY.md` for reporting and deployment guidance.
 
 The workflow verifies pull requests and deploys only a successful `main` build. It installs from the lockfile, validates data and application assets, runs tests and the content audit, regenerates the standalone artifact, rejects drift, performs a dependency audit, and uploads only runtime files.
 
-In repository settings, choose **GitHub Actions** as the Pages source. The application supports project subpaths such as `https://example.github.io/repository/`.
+In repository settings, choose **GitHub Actions** as the Pages source. The public site is designed for `https://galva0101.github.io/tactic-atlas/`.
 
 ## Troubleshooting
 
