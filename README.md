@@ -16,37 +16,6 @@ Version 4 replaces executable content markup with a versioned JSON model. The br
 - Offline access after first load, an explicit update prompt, and a fully self-contained `standalone.html` edition.
 - Transparent per-playbook quality scores and project-wide coverage/content-quality reports.
 
-## Quick start
-
-Node.js 20 or newer is required for project checks. The application itself is dependency-free.
-
-```bash
-npm install
-npm test
-npm run build
-npm run check
-```
-
-Serve the multi-file edition over HTTP:
-
-```bash
-python -m http.server 8000
-```
-
-Open `http://localhost:8000/`. You can also open `standalone.html` directly for an air-gapped, no-server reader.
-
-## Commands
-
-| Command | Purpose |
-| --- | --- |
-| `npm test` | Run unit tests and strict project validation. |
-| `npm run validate` | Validate schema, content, assets, PWA controls, links, and generated-artifact integrity. |
-| `npm run build` | Regenerate the deterministic standalone edition. |
-| `npm run build:check` | Fail when `standalone.html` differs from its sources. |
-| `npm run audit-content` | Recalculate quality, completeness, telemetry, query, validation, and response coverage reports. |
-| `npm run check` | Run the complete local quality gate without mutating source artifacts. |
-
-Always rebuild after changing `index.html`, `assets/`, or `data/playbooks.json`.
 
 ## Project structure
 
