@@ -91,28 +91,6 @@ Detection objects include the objective, hypothesis, behavioral strategy, maturi
 
 Response objects contain triage, investigation, scoping, immediate/short-term/long-term containment, eradication, recovery, post-incident actions, escalation, analyst decisions, and evidence-backed closure criteria. Disruptive steps retain prerequisites, approval, evidence, business-impact, rollback, and contraindication context.
 
-## Updating or adding content
-
-1. Copy an existing v4 record with similar telemetry and platform scope.
-2. Assign a stable unique ID and update all ATT&CK mappings with an authoritative source and retrieval date.
-3. Add technique-specific telemetry and detection logic. Never invent event IDs, fields, product capabilities, or Atomic Red Team identifiers.
-4. Mark example queries `adaptation_required: true` until tested against the target schema and product.
-5. Add safe positive and negative validation procedures, cleanup, and warnings.
-6. Complete every response phase or document why a phase is not applicable.
-7. Set lifecycle ownership, review dates, dependencies, known gaps, and rollback guidance.
-8. Run `npm run audit-content`, `npm test`, `npm run build`, and `npm run check`.
-
-Quality scores are computed evidence summaries, not analyst verdicts. Do not edit a score merely to improve a dashboard.
-
-## Migrating version 3 content
-
-The deterministic migration accepts an existing v3 JSON file and writes a v4 dataset:
-
-```bash
-node scripts/migrate-v4.mjs --input path/to/v3-playbooks.json --output data/playbooks.json
-```
-
-The migration converts the former allowlisted HTML blocks to text-only sections, preserves a source hash, fixes known encoding defects, extracts technique-specific guidance, and marks inherited or unresolved claims with provenance. Review migration warnings before production deployment.
 
 ## ATT&CK updates
 
