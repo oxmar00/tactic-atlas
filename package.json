@@ -1,0 +1,24 @@
+{
+  "name": "tactic-atlas",
+  "version": "4.5.0",
+  "private": true,
+  "type": "module",
+  "description": "TacticAtlas: a static MITRE ATT&CK detection and incident-response playbook workspace",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "add-threat-groups": "node scripts/add-threat-groups.mjs",
+    "enhance-telemetry": "node scripts/enhance-telemetry.mjs",
+    "test": "node scripts/check.mjs --test",
+    "audit-content": "node scripts/audit-content.mjs",
+    "build": "node scripts/build-standalone.mjs",
+    "build:check": "node scripts/build-standalone.mjs --check",
+    "check": "node scripts/check.mjs",
+    "build-attack-analytics": "node scripts/build-attack-analytics.mjs"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10.9.2",
+  "license": "MIT"
+}

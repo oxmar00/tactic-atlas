@@ -1,0 +1,230 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Curated Event ID metadata for the technique investigation flowchart generator. Field lists are NOT derived from ATT&CK STIX (which supplies log source, channel, and analytic tuning parameters only). Each entry is hand-authored from the vendor documentation named in `source` and is limited to fields that appear in the event schema itself. Events cited by ATT&CK but absent from this catalog render without a field list rather than with invented fields.",
+  "provenance": {
+    "windows_security": "Microsoft Learn — Windows Security Auditing event reference",
+    "windows_powershell": "Microsoft Learn — PowerShell logging (Module, Script Block, Engine lifecycle)",
+    "windows_system": "Microsoft Learn — Windows System log (Service Control Manager)",
+    "sysmon": "Microsoft Learn — Sysinternals Sysmon event schema"
+  },
+  "events": [
+    {
+      "event_id": "4688", "log_source": "Windows Security", "name": "Process Creation", "source": "windows_security",
+      "use_for": ["Process execution", "Command-line analysis", "Parent-child lineage"],
+      "fields": ["NewProcessName", "CommandLine", "ParentProcessName", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "NewProcessId", "TokenElevationType", "MandatoryLabel"],
+      "investigation": ["Identify the parent process", "Review the full command line", "Identify the executing user", "Check the executable path and elevation"],
+      "conditional": "CommandLine is only populated when the 'Include command line in process creation events' policy is enabled."
+    },
+    {
+      "event_id": "4624", "log_source": "Windows Security", "name": "Successful Logon", "source": "windows_security",
+      "use_for": ["Authentication analysis", "Logon type triage", "Source host attribution"],
+      "fields": ["TargetUserName", "TargetDomainName", "TargetLogonId", "LogonType", "AuthenticationPackageName", "LogonProcessName", "WorkstationName", "IpAddress", "IpPort", "ImpersonationLevel", "ElevatedToken"],
+      "investigation": ["Check LogonType (3 network, 10 RemoteInteractive)", "Correlate IpAddress and WorkstationName", "Pivot on TargetLogonId to later activity"]
+    },
+    {
+      "event_id": "4625", "log_source": "Windows Security", "name": "Failed Logon", "source": "windows_security",
+      "use_for": ["Brute force detection", "Password spraying", "Account enumeration"],
+      "fields": ["TargetUserName", "TargetDomainName", "Status", "SubStatus", "LogonType", "WorkstationName", "IpAddress", "IpPort", "ProcessName", "FailureReason"],
+      "investigation": ["Decode Status/SubStatus for the failure reason", "Count distinct accounts per source IP", "Compare against a later 4624 from the same source"]
+    },
+    {
+      "event_id": "4648", "log_source": "Windows Security", "name": "Logon with Explicit Credentials", "source": "windows_security",
+      "use_for": ["Credential use", "Runas activity", "Lateral movement staging"],
+      "fields": ["SubjectUserName", "SubjectDomainName", "SubjectLogonId", "TargetUserName", "TargetDomainName", "TargetServerName", "ProcessName", "IpAddress"],
+      "investigation": ["Compare SubjectUserName with TargetUserName", "Identify the initiating process", "Check whether the target server is expected for this user"]
+    },
+    {
+      "event_id": "4672", "log_source": "Windows Security", "name": "Special Privileges Assigned to New Logon", "source": "windows_security",
+      "use_for": ["Privileged logon detection", "Administrative access tracking"],
+      "fields": ["SubjectUserName", "SubjectDomainName", "SubjectLogonId", "PrivilegeList"],
+      "investigation": ["Review PrivilegeList for sensitive privileges", "Correlate SubjectLogonId with the matching 4624", "Confirm the account is expected to hold these privileges"]
+    },
+    {
+      "event_id": "4698", "log_source": "Windows Security", "name": "Scheduled Task Created", "source": "windows_security",
+      "use_for": ["Persistence", "Scheduled execution"],
+      "fields": ["SubjectUserName", "SubjectDomainName", "TaskName", "TaskContent"],
+      "investigation": ["Parse TaskContent for the command and trigger", "Identify the creating account", "Check whether the task name mimics a legitimate one"]
+    },
+    {
+      "event_id": "4702", "log_source": "Windows Security", "name": "Scheduled Task Updated", "source": "windows_security",
+      "use_for": ["Persistence modification"],
+      "fields": ["SubjectUserName", "TaskName", "TaskContentNew"],
+      "investigation": ["Diff TaskContentNew against the prior definition", "Identify who modified the task"]
+    },
+    {
+      "event_id": "4720", "log_source": "Windows Security", "name": "User Account Created", "source": "windows_security",
+      "use_for": ["Persistence", "Account manipulation"],
+      "fields": ["TargetUserName", "TargetDomainName", "TargetSid", "SubjectUserName", "SamAccountName", "DisplayName", "UserPrincipalName"],
+      "investigation": ["Identify the creating account", "Check for a following 4728/4732 group addition", "Confirm the account matches an approved request"]
+    },
+    {
+      "event_id": "4728", "log_source": "Windows Security", "name": "Member Added to Security-Enabled Global Group", "source": "windows_security",
+      "use_for": ["Privilege escalation", "Persistence"],
+      "fields": ["MemberName", "MemberSid", "TargetUserName", "TargetDomainName", "SubjectUserName"],
+      "investigation": ["Check whether the target group is privileged", "Identify who performed the addition", "Correlate with a recent 4720"]
+    },
+    {
+      "event_id": "4732", "log_source": "Windows Security", "name": "Member Added to Security-Enabled Local Group", "source": "windows_security",
+      "use_for": ["Local privilege escalation", "Persistence"],
+      "fields": ["MemberName", "MemberSid", "TargetUserName", "SubjectUserName"],
+      "investigation": ["Check for addition to Administrators or Remote Desktop Users", "Identify the initiating account"]
+    },
+    {
+      "event_id": "4740", "log_source": "Windows Security", "name": "Account Locked Out", "source": "windows_security",
+      "use_for": ["Brute force impact", "Account lockout triage"],
+      "fields": ["TargetUserName", "TargetDomainName", "TargetSid", "SubjectUserName", "CallerComputerName"],
+      "investigation": ["Identify CallerComputerName as the lockout source", "Correlate with preceding 4625 volume"]
+    },
+    {
+      "event_id": "4768", "log_source": "Windows Security", "name": "Kerberos Authentication Ticket (TGT) Requested", "source": "windows_security",
+      "use_for": ["Kerberos authentication analysis", "AS-REP roasting indicators"],
+      "fields": ["TargetUserName", "TargetDomainName", "ServiceName", "TicketOptions", "TicketEncryptionType", "PreAuthType", "IpAddress", "Status"],
+      "investigation": ["Check TicketEncryptionType for weak ciphers", "Check PreAuthType for disabled pre-authentication", "Attribute IpAddress to a known host"]
+    },
+    {
+      "event_id": "4769", "log_source": "Windows Security", "name": "Kerberos Service Ticket Requested", "source": "windows_security",
+      "use_for": ["Kerberoasting indicators", "Service access analysis"],
+      "fields": ["TargetUserName", "TargetDomainName", "ServiceName", "ServiceSid", "TicketOptions", "TicketEncryptionType", "IpAddress", "Status"],
+      "investigation": ["Flag TicketEncryptionType 0x17 (RC4) against service accounts", "Count distinct ServiceName per requesting account", "Attribute IpAddress"]
+    },
+    {
+      "event_id": "4771", "log_source": "Windows Security", "name": "Kerberos Pre-Authentication Failed", "source": "windows_security",
+      "use_for": ["Kerberos brute force", "Account enumeration"],
+      "fields": ["TargetUserName", "TargetSid", "ServiceName", "TicketOptions", "Status", "PreAuthType", "IpAddress"],
+      "investigation": ["Decode Status for the failure cause", "Count failures per source IP and account"]
+    },
+    {
+      "event_id": "4776", "log_source": "Windows Security", "name": "NTLM Credential Validation", "source": "windows_security",
+      "use_for": ["NTLM authentication analysis", "Legacy protocol use"],
+      "fields": ["PackageName", "TargetUserName", "Workstation", "Status"],
+      "investigation": ["Identify unexpected NTLM use where Kerberos is expected", "Correlate Workstation with known assets"]
+    },
+    {
+      "event_id": "5140", "log_source": "Windows Security", "name": "Network Share Object Accessed", "source": "windows_security",
+      "use_for": ["Lateral movement", "Share enumeration"],
+      "fields": ["SubjectUserName", "SubjectDomainName", "SubjectLogonId", "ShareName", "ShareLocalPath", "IpAddress", "IpPort", "AccessMask"],
+      "investigation": ["Flag access to ADMIN$, C$, or IPC$", "Attribute IpAddress to a source host", "Pivot on SubjectLogonId"]
+    },
+    {
+      "event_id": "5145", "log_source": "Windows Security", "name": "Network Share Object Checked (Detailed)", "source": "windows_security",
+      "use_for": ["Detailed file share access", "Data staging"],
+      "fields": ["SubjectUserName", "ShareName", "ShareLocalPath", "RelativeTargetName", "IpAddress", "AccessMask", "AccessList"],
+      "investigation": ["Review RelativeTargetName for sensitive files", "Assess AccessList for write or delete intent"],
+      "conditional": "High volume; requires Detailed File Share auditing to be enabled."
+    },
+    {
+      "event_id": "7045", "log_source": "Windows System", "name": "Service Installed", "source": "windows_system",
+      "use_for": ["Persistence", "Privilege escalation", "Remote execution"],
+      "fields": ["ServiceName", "ImagePath", "ServiceType", "StartType", "AccountName"],
+      "investigation": ["Inspect ImagePath for suspicious binaries or encoded commands", "Check StartType for auto-start persistence", "Confirm the service is expected on this host"]
+    },
+    {
+      "event_id": "1102", "log_source": "Windows Security", "name": "Audit Log Cleared", "source": "windows_security",
+      "use_for": ["Defense evasion", "Anti-forensics"],
+      "fields": ["SubjectUserName", "SubjectDomainName", "SubjectLogonId"],
+      "investigation": ["Treat as high signal", "Identify the clearing account", "Establish what activity preceded the gap"]
+    },
+    {
+      "event_id": "4103", "log_source": "Windows PowerShell Operational", "name": "PowerShell Module/Pipeline Logging", "source": "windows_powershell",
+      "use_for": ["Cmdlet and parameter visibility"],
+      "fields": ["ContextInfo", "UserId", "Payload", "CommandName", "CommandType", "HostApplication", "EngineVersion", "RunspaceId"],
+      "investigation": ["Review Payload for invoked cmdlets and arguments", "Identify HostApplication as the execution vector"],
+      "conditional": "Requires Module Logging to be enabled by policy."
+    },
+    {
+      "event_id": "4104", "log_source": "Windows PowerShell Operational", "name": "PowerShell Script Block Logging", "source": "windows_powershell",
+      "use_for": ["Deobfuscated script content", "Encoded command analysis"],
+      "fields": ["ScriptBlockText", "ScriptBlockId", "Path", "MessageNumber", "MessageTotal"],
+      "investigation": ["Read ScriptBlockText for the deobfuscated script", "Reassemble multi-part blocks via MessageNumber and MessageTotal", "Check Path for an on-disk script"],
+      "conditional": "Requires Script Block Logging to be enabled by policy. Warning-level blocks are captured even when only suspicious content triggers logging."
+    },
+    {
+      "event_id": "4105", "log_source": "Windows PowerShell Operational", "name": "PowerShell Script Block Execution Start", "source": "windows_powershell",
+      "use_for": ["Script execution timing"],
+      "fields": ["ScriptBlockId", "RunspaceId"],
+      "investigation": ["Correlate ScriptBlockId back to the 4104 content"],
+      "conditional": "Only emitted when script block invocation logging is enabled; very high volume."
+    },
+    {
+      "event_id": "4106", "log_source": "Windows PowerShell Operational", "name": "PowerShell Script Block Execution Stop", "source": "windows_powershell",
+      "use_for": ["Script execution timing"],
+      "fields": ["ScriptBlockId", "RunspaceId"],
+      "investigation": ["Bound execution duration alongside 4105"],
+      "conditional": "Only emitted when script block invocation logging is enabled; very high volume."
+    },
+    {
+      "event_id": "400", "log_source": "Windows PowerShell (classic)", "name": "Engine Lifecycle Started", "source": "windows_powershell",
+      "use_for": ["PowerShell session start", "Host identification"],
+      "fields": ["EngineVersion", "RunspaceId", "HostName", "HostApplication", "EngineState"],
+      "investigation": ["Check HostApplication for non-standard hosts", "Flag EngineVersion 2.0 as a downgrade indicator"]
+    },
+    {
+      "event_id": "403", "log_source": "Windows PowerShell (classic)", "name": "Engine Lifecycle Stopped", "source": "windows_powershell",
+      "use_for": ["PowerShell session end"],
+      "fields": ["EngineVersion", "RunspaceId", "HostName", "HostApplication", "EngineState"],
+      "investigation": ["Bound the session alongside the matching 400"]
+    },
+    {
+      "event_id": "4663", "log_source": "Windows Security", "name": "Attempt Made to Access an Object", "source": "windows_security",
+      "use_for": ["File and registry access auditing"],
+      "fields": ["SubjectUserName", "ObjectName", "ObjectType", "HandleId", "AccessMask", "ProcessName"],
+      "investigation": ["Decode AccessMask for the requested rights", "Identify ProcessName as the accessing binary"],
+      "conditional": "Requires a SACL on the target object."
+    },
+    {
+      "event_id": "4670", "log_source": "Windows Security", "name": "Permissions on an Object Were Changed", "source": "windows_security",
+      "use_for": ["Permission tampering", "Defense evasion"],
+      "fields": ["SubjectUserName", "ObjectName", "ObjectType", "OldSd", "NewSd", "ProcessName"],
+      "investigation": ["Diff OldSd against NewSd", "Identify who changed the descriptor"]
+    },
+    {
+      "event_id": "1", "log_source": "Sysmon", "name": "Process Creation", "source": "sysmon",
+      "use_for": ["Process execution", "Command-line analysis", "Hash and signature triage", "Parent lineage"],
+      "fields": ["Image", "CommandLine", "ParentImage", "ParentCommandLine", "User", "CurrentDirectory", "IntegrityLevel", "Hashes", "OriginalFileName", "ProcessGuid", "LogonId"],
+      "investigation": ["Review CommandLine and ParentCommandLine together", "Compare OriginalFileName with Image to spot renamed binaries", "Pivot on ProcessGuid across other Sysmon events"]
+    },
+    {
+      "event_id": "3", "log_source": "Sysmon", "name": "Network Connection", "source": "sysmon",
+      "use_for": ["Process-attributed network activity", "C2 identification"],
+      "fields": ["Image", "User", "Protocol", "SourceIp", "SourcePort", "DestinationIp", "DestinationHostname", "DestinationPort", "Initiated", "ProcessGuid"],
+      "investigation": ["Attribute the connection to the initiating Image", "Check DestinationHostname and port against expectations", "Pivot on ProcessGuid to the creating process"]
+    },
+    {
+      "event_id": "7", "log_source": "Sysmon", "name": "Image Loaded", "source": "sysmon",
+      "use_for": ["DLL load analysis", "Unsigned module detection", "Assembly loads"],
+      "fields": ["Image", "ImageLoaded", "Hashes", "Signed", "Signature", "SignatureStatus", "OriginalFileName", "ProcessGuid"],
+      "investigation": ["Flag unsigned or invalidly signed modules", "Check ImageLoaded path against the expected location"],
+      "conditional": "High volume; typically requires targeted Sysmon configuration."
+    },
+    {
+      "event_id": "10", "log_source": "Sysmon", "name": "Process Access", "source": "sysmon",
+      "use_for": ["Credential dumping indicators", "Process injection indicators"],
+      "fields": ["SourceImage", "TargetImage", "GrantedAccess", "CallTrace", "SourceProcessGUID", "TargetProcessGUID"],
+      "investigation": ["Flag high GrantedAccess masks against lsass.exe", "Inspect CallTrace for unbacked memory regions"]
+    },
+    {
+      "event_id": "11", "log_source": "Sysmon", "name": "File Create", "source": "sysmon",
+      "use_for": ["Payload drop detection", "Staging directory analysis"],
+      "fields": ["Image", "TargetFilename", "CreationUtcTime", "User", "ProcessGuid"],
+      "investigation": ["Check TargetFilename against staging paths", "Attribute the write to the creating Image"]
+    },
+    {
+      "event_id": "13", "log_source": "Sysmon", "name": "Registry Value Set", "source": "sysmon",
+      "use_for": ["Persistence via registry", "Configuration tampering"],
+      "fields": ["Image", "TargetObject", "Details", "EventType", "User", "ProcessGuid"],
+      "investigation": ["Check TargetObject against autostart locations", "Review Details for the written value"]
+    },
+    {
+      "event_id": "14", "log_source": "Sysmon", "name": "Registry Key and Value Rename", "source": "sysmon",
+      "use_for": ["Registry tampering", "Defense evasion"],
+      "fields": ["Image", "TargetObject", "NewName", "EventType", "User"],
+      "investigation": ["Compare TargetObject with NewName", "Attribute the change to the initiating Image"]
+    },
+    {
+      "event_id": "22", "log_source": "Sysmon", "name": "DNS Query", "source": "sysmon",
+      "use_for": ["Process-attributed DNS resolution", "C2 domain identification"],
+      "fields": ["Image", "QueryName", "QueryStatus", "QueryResults", "User", "ProcessGuid"],
+      "investigation": ["Attribute QueryName to the requesting Image", "Check QueryResults for the resolved infrastructure"]
+    }
+  ]
+}

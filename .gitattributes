@@ -1,0 +1,10 @@
+# standalone.html is a deterministic artifact whose inline script/style CSP hashes are
+# SHA-256 over LF-normalised content, and CI rejects any drift against a fresh build.
+# Forcing LF in the working tree keeps Windows checkouts byte-identical to the build output.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">TacticAtlas</title>
+  <desc id="desc">An ATT&amp;CK matrix grid with a highlighted path escalating across four tactic columns.</desc>
+  <!-- Maskable-safe: all content sits inside the central 80% so platform cropping cannot
+       clip the mark. Grid is 4x4 cells of 52px on a 24px gutter, inset at 116..396. -->
+  <rect width="512" height="512" rx="112" fill="#0b0f17"/>
+
+  <!-- Unvisited matrix cells -->
+  <g fill="#243046">
+    <rect x="116" y="116" width="52" height="52" rx="13"/>
+    <rect x="116" y="192" width="52" height="52" rx="13"/>
+    <rect x="116" y="268" width="52" height="52" rx="13"/>
+    <rect x="192" y="116" width="52" height="52" rx="13"/>
+    <rect x="192" y="268" width="52" height="52" rx="13"/>
+    <rect x="192" y="344" width="52" height="52" rx="13"/>
+    <rect x="268" y="116" width="52" height="52" rx="13"/>
+    <rect x="268" y="268" width="52" height="52" rx="13"/>
+    <rect x="268" y="344" width="52" height="52" rx="13"/>
+    <rect x="344" y="192" width="52" height="52" rx="13"/>
+    <rect x="344" y="268" width="52" height="52" rx="13"/>
+    <rect x="344" y="344" width="52" height="52" rx="13"/>
+  </g>
+
+  <!-- The attack path, drawn behind the active cells so it reads as a route between them -->
+  <path d="M142 370 L218 218 L294 218 L370 142" fill="none" stroke="#70e0d2"
+        stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Visited cells: the technique chain an analyst is tracing -->
+  <g fill="#f2ad55">
+    <rect x="116" y="344" width="52" height="52" rx="13"/>
+    <rect x="192" y="192" width="52" height="52" rx="13"/>
+    <rect x="268" y="192" width="52" height="52" rx="13"/>
+    <rect x="344" y="116" width="52" height="52" rx="13"/>
+  </g>
+</svg>
