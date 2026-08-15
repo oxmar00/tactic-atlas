@@ -234,7 +234,7 @@ function validateTelemetry(value, path, add) {
     (source.event_ids || []).forEach((eventId, eventIndex) => {
       const eventAt = `${at}.event_ids[${eventIndex}]`;
       if (!plainObject(eventId)) { add(eventAt, "must be an object"); return; }
-      if ("provenance" in eventId && !/^(?:legacy-authored-unverified|attack-v[\d.]+-verified)$/.test(text(eventId.provenance))) {
+      if ("provenance" in eventId && !/^(?:legacy-authored-unverified|attack-v[\d.]+-verified)$/.test(String(eventId.provenance ?? "").trim())) {
         add(`${eventAt}.provenance`, "must be 'legacy-authored-unverified' or 'attack-vX.Y-verified'");
       }
     });
