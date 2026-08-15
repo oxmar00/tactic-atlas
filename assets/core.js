@@ -659,11 +659,13 @@
       hypothesis: text(detection.hypothesis),
       objective: text(detection.objective),
       leads: strategies,
+      // Response steps are objects in the v4 dataset but plain strings in older records and
+      // fixtures, so both shapes must resolve rather than being silently dropped.
       pivots: (Array.isArray(response.investigation) ? response.investigation : [])
-        .map(step => ({ title: text(step?.title || step?.action), rationale: text(step?.rationale) }))
+        .map(step => ({ title: flowLabel(step), rationale: text(step?.rationale) }))
         .filter(step => step.title),
       scoping: (Array.isArray(response.scoping) ? response.scoping : [])
-        .map(step => text(step?.title || step?.action)).filter(Boolean),
+        .map(flowLabel).filter(Boolean),
       falsePositives: list(detection.false_positives, 8)
     };
   }
