@@ -19,7 +19,32 @@
         "tactic_order",
         "attack",
         "quality_model"
-      ]
+      ],
+      "properties": {
+        "schema_version": { "const": "4.0.0" },
+        "content_version": { "const": "4.0.0" },
+        "generated": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "counts": {
+          "type": "object",
+          "required": ["total", "technique", "operational", "platform"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "technique": { "type": "integer", "minimum": 0 },
+            "operational": { "type": "integer", "minimum": 0 },
+            "platform": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "tactic_order": {
+          "type": "array",
+          "minItems": 15,
+          "items": { "type": "string" }
+        },
+        "attack": { "type": "object", "minProperties": 1 },
+        "quality_model": { "type": "object", "minProperties": 1 }
+      }
     },
     "groups": {
       "type": "array",
@@ -59,6 +84,7 @@
         "subtechniques",
         "threat_groups",
         "platforms",
+        "data_sources",
         "data_source_summary",
         "telemetry_requirements",
         "detection",
@@ -128,6 +154,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "data_sources": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "telemetry_requirements": {
           "type": "array",

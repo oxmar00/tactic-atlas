@@ -119,7 +119,14 @@
     </div>
 
     <div class="loading" id="loading" aria-hidden="true"><span></span><span></span><span></span></div>
-    <section class="matrix-view" id="matrix" aria-label="ATT&CK matrix view" hidden></section>
+    <div class="matrix-shell" id="matrix-shell" hidden>
+      <div class="matrix-header-scroll" id="matrix-header-scroll" tabindex="-1">
+        <div class="matrix-header-grid" id="matrix-headings"></div>
+      </div>
+      <div class="matrix-scroll" id="matrix-scroll" role="region" aria-label="Horizontally scrollable ATT&amp;CK matrix" tabindex="0">
+        <section class="matrix-view" id="matrix" aria-label="ATT&amp;CK matrix view"></section>
+      </div>
+    </div>
     <section class="list-view" id="list" aria-label="Compact playbook list" hidden></section>
     <section class="table-view" id="table" aria-label="Playbook coverage table" hidden></section>
     <section class="dashboard-view" id="dashboard" aria-label="Coverage dashboard" hidden></section>
@@ -164,6 +171,7 @@
         <nav class="section-nav" id="p-toc" aria-label="Playbook sections"></nav>
         <article class="playbook-body" id="p-body"></article>
       </div>
+      <div class="dialog-status" id="p-status" role="status" aria-live="polite" aria-atomic="true"></div>
       <nav class="playbook-navigation" aria-label="Adjacent playbooks">
         <button id="p-prev" type="button">← Previous</button>
         <span id="p-position" aria-live="polite"></span>

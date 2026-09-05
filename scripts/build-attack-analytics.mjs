@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Extracts the authoritative technique -> detection-telemetry mapping from the ATT&CK STIX
 // bundle. Everything emitted here is derived from MITRE objects; nothing is inferred:
@@ -11,21 +12,28 @@ import { resolve } from "node:path";
 // Per-event FIELD lists are deliberately absent: ATT&CK does not publish them, so they live
 // in the separately curated data/event-catalog.json instead of being synthesised here.
 
-const ROOT = new URL("../", import.meta.url);
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "..");
 // A single channel may declare several codes: "EventCode=4103, 4104, 4105, 4106".
 const EVENT_CODE_DECL = /Event(?:Code|ID)\s*=\s*([\d,\s]+)/gi;
 const WINDOWS_SOURCE = /^(?:wineventlog|etw:|windows:)/i;
+const ATTACK_VERSION_PATTERN = /^\d+(?:\.\d+){0,2}$/;
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? resolve(process.argv[index + 1]) : fallback;
 }
 
+function valueArg(name) {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]).trim() : "";
+}
+
 function extId(object) {
   return (object.external_references || []).find(ref => ref.source_name === "mitre-attack")?.external_id || null;
 }
 
-function parseEventCodes(channel) {
+export function parseEventCodes(channel) {
   if (!channel) return [];
   const codes = [];
   for (const match of String(channel).matchAll(EVENT_CODE_DECL)) {
@@ -40,18 +48,21 @@ function index(objects, type, liveOnly = true) {
     .map(o => [o.id, o]));
 }
 
-export function buildAttackAnalytics(stix) {
+export function buildAttackAnalytics(stix, attackVersion) {
+  if (!ATTACK_VERSION_PATTERN.test(String(attackVersion || "").trim())) {
+    throw new Error("A valid ATT&CK release version is required (for example, 19.1).");
+  }
   const objects = stix.objects || [];
   const patterns = index(objects, "attack-pattern");
   const strategies = index(objects, "x-mitre-detection-strategy");
-  const analytics = index(objects, "x-mitre-analytic", false);
+  const analytics = index(objects, "x-mitre-analytic");
   const groups = index(objects, "intrusion-set");
 
   const techToStrategies = new Map();
   const parentOf = new Map();
   const groupTechniques = new Map();
   objects.forEach(o => {
-    if (o.type !== "relationship") return;
+    if (o.type !== "relationship" || o.revoked || o.x_mitre_deprecated) return;
     const { relationship_type: rt, source_ref: src, target_ref: tgt } = o;
     if (rt === "detects" && strategies.has(src) && patterns.has(tgt)) {
       if (!techToStrategies.has(tgt)) techToStrategies.set(tgt, []);
@@ -100,8 +111,9 @@ export function buildAttackAnalytics(stix) {
         (analytic.x_mitre_log_source_references || []).forEach(source => {
           const name = (source.name || "").trim();
           const channel = (source.channel || "").trim();
-          if (!name || seen.has(`${name}|${channel}`)) return;
-          seen.add(`${name}|${channel}`);
+          const referenceKey = [analyticId, strategyId, name, channel].join("\u0000");
+          if (!name || seen.has(referenceKey)) return;
+          seen.add(referenceKey);
           const eventIds = parseEventCodes(channel);
           // ATT&CK sometimes cites a Windows log source on a technique with no Windows
           // platform. Flag rather than drop: the citation is MITRE's, but the analyst must
@@ -141,6 +153,7 @@ export function buildAttackAnalytics(stix) {
 
   return {
     schema_version: "1.0.0",
+    attack_version: String(attackVersion).trim(),
     generated_from: "MITRE ATT&CK Enterprise STIX (attack-stix-data)",
     source_url: "https://github.com/mitre-attack/attack-stix-data",
     counts: {
@@ -156,12 +169,13 @@ export function buildAttackAnalytics(stix) {
 
 async function main() {
   const stixPath = arg("stix");
-  if (!stixPath) throw new Error("Usage: node scripts/build-attack-analytics.mjs --stix <enterprise-attack.json> [--output data/attack-analytics.json]");
-  const output = arg("output", resolve(new URL("data/attack-analytics.json", ROOT).pathname));
-  const payload = buildAttackAnalytics(JSON.parse(await readFile(stixPath, "utf8")));
+  const attackVersion = valueArg("attack-version");
+  if (!stixPath || !attackVersion) throw new Error("Usage: node scripts/build-attack-analytics.mjs --stix <enterprise-attack.json> --attack-version X.Y [--output data/attack-analytics.json]");
+  const output = arg("output", resolve(ROOT, "data/attack-analytics.json"));
+  const payload = buildAttackAnalytics(JSON.parse(await readFile(stixPath, "utf8")), attackVersion);
   await writeFile(output, `${JSON.stringify(payload)}\n`, "utf8");
   console.log(JSON.stringify({ output, ...payload.counts }, null, 2));
 }
 
-const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) main().catch(error => { console.error(error.stack || error.message); process.exitCode = 1; });

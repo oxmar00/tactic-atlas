@@ -34,7 +34,10 @@ Version 4 replaces executable content markup with a versioned JSON model. The br
 │   └── style.css
 ├── data/
 │   ├── playbooks.json              # v4 structured source of truth
-│   └── playbooks.schema.json
+│   ├── playbooks.schema.json
+│   ├── attack-analytics.json       # versioned ATT&CK-derived telemetry mapping
+│   ├── event-catalog.json          # curated vendor event metadata
+│   └── revision.json               # generated runtime content fingerprint
 ├── reports/
 │   ├── content-quality.json
 │   ├── content-quality.md
@@ -42,6 +45,7 @@ Version 4 replaces executable content markup with a versioned JSON model. The br
 ├── scripts/
 │   ├── add-threat-groups.mjs
 │   ├── audit-content.mjs
+│   ├── build-attack-analytics.mjs
 │   ├── build-standalone.mjs
 │   ├── check.mjs
 │   ├── enhance-telemetry.mjs
@@ -90,7 +94,7 @@ The complete machine-readable contract is in `data/playbooks.schema.json`. `cont
 
 Every telemetry entry distinguishes required, recommended, optional, or compensating coverage and records event types, event identifiers, raw/normalized fields, mappings, correlation keys, retention, latency, collection prerequisites, blind spots, quality gates, health monitoring, example products, and detection/investigation/evidence relevance.
 
-Each event identifier's `provenance` is either `legacy-authored-unverified` (inherited from the original v3 content and not yet independently confirmed) or `attack-vX.Y-verified` (confirmed against an official MITRE ATT&CK detection-strategy analytic for that technique). Verified telemetry entries also carry an `attack_analytics` array citing the specific analytic id, detection strategy id/name/URL, and log source/channel MITRE associates with the technique. Where a playbook was missing an entire telemetry source category that MITRE's analytics indicate applies (e.g. a Windows-focused technique that is also valid on macOS), a new entry is added using this dataset's own established field template for that source, with technique-specific event identifiers, detection/investigation relevance, and blind spots. Run `npm run enhance-telemetry -- --stix <path-to-enterprise-attack.json>` to regenerate this enrichment against a newer ATT&CK STIX snapshot; see `scripts/enhance-telemetry.mjs`.
+Each event identifier's `provenance` is either `legacy-authored-unverified` (inherited from the original v3 content and not yet independently confirmed) or `attack-vX.Y-verified` (confirmed against an official MITRE ATT&CK detection-strategy analytic for that technique). Verified telemetry entries also carry an `attack_analytics` array citing the specific analytic id, detection strategy id/name/URL, and log source/channel MITRE associates with the technique. Where a playbook was missing an entire telemetry source category that MITRE's analytics indicate applies (e.g. a Windows-focused technique that is also valid on macOS), a new entry is added using this dataset's own established field template for that source, with technique-specific event identifiers, detection/investigation relevance, and blind spots. The curated `data/event-catalog.json` supplies vendor field, investigation, and collection-policy details in the UI; `data/attack-analytics.json` stores the complete versioned ATT&CK-derived mapping.
 
 ### Detection and response
 
@@ -106,12 +110,21 @@ The layout is a fixed vertical spine — alert, triage, then each `decision_tree
 
 ### Threat-group mapping
 
-Each playbook's `threat_groups` field lists the ATT&CK group IDs (`Gxxxx`) directly observed using that technique, sourced from the official MITRE ATT&CK STIX relationship data (group-to-technique `uses` relationships only — not techniques reached indirectly through a group's malware or tools). Names, aliases, and reference URLs are resolved against the top-level `groups` directory in `data/playbooks.json`, so each ID is stored once regardless of how many playbooks reference it. Run `npm run add-threat-groups -- --stix <path-to-enterprise-attack.json>` to regenerate this mapping against a newer ATT&CK STIX snapshot; see `scripts/add-threat-groups.mjs`.
+Each playbook's `threat_groups` field lists the ATT&CK group IDs (`Gxxxx`) directly observed using that technique, sourced from the official MITRE ATT&CK STIX relationship data (group-to-technique `uses` relationships only — not techniques reached indirectly through a group's malware or tools). Names, aliases, and reference URLs are resolved against the top-level `groups` directory in `data/playbooks.json`, so each ID is stored once regardless of how many playbooks reference it. Run `npm run add-threat-groups -- --stix <path-to-enterprise-attack.json> --attack-version X.Y` to regenerate this mapping against a matching ATT&CK STIX snapshot; see `scripts/add-threat-groups.mjs`. Empty or mapping-reducing inputs are rejected unless removals are explicitly acknowledged with `--allow-removals`.
 
 
 ## ATT&CK updates
 
 ATT&CK mappings must be reviewed whenever MITRE publishes a new release. Update the metadata snapshot/version first, reconcile revoked or replaced objects using official change relationships, then update tactic, technique, sub-technique, platform, and reference fields. Never silently replace a legacy ID; retain a deprecated record or explicit migration relationship when it matters to historical cases. Re-run `npm run add-threat-groups` and `npm run enhance-telemetry` against the same STIX release afterward so the threat-group directory and telemetry event-identifier verification stay aligned with the current technique set.
+
+Build and apply a versioned analytics artifact with matching release values:
+
+```powershell
+npm run build-attack-analytics -- --stix <path-to-enterprise-attack.json> --attack-version X.Y
+npm run enhance-telemetry -- --analytics data/attack-analytics.json
+```
+
+Direct STIX enrichment is also supported with an explicit version: `npm run enhance-telemetry -- --stix <path-to-enterprise-attack.json> --attack-version X.Y`. The command refuses empty or unexpectedly partial evidence before changing data. Use `--allow-partial` only after intentionally verifying a partial source; it scopes changes to playbooks fully represented by that source and does not bypass version agreement. Any removal of existing ATT&CK-derived evidence additionally requires `--allow-removals`.
 
 ## Security model
 
@@ -121,6 +134,7 @@ ATT&CK mappings must be reviewed whenever MITRE publishes a new release. Update 
 - URL state, storage, clipboard fallbacks, JSON input, prototype-mutating keys, and exports are bounded and validated.
 - CSV exports neutralize spreadsheet formula prefixes.
 - The service worker caches only known successful same-origin application resources, scopes cache cleanup to this application, and uses a navigation-only HTML fallback.
+- `data/revision.json` fingerprints every deployed runtime source, so code-only and data-only releases install a distinct cache without coupling cache state to the data schema version.
 - The standalone build uses generated content hashes for inline scripts and styles and rejects unresolved local runtime dependencies.
 
 See `SECURITY.md` for reporting and deployment guidance.

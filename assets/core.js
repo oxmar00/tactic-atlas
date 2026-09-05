@@ -204,7 +204,7 @@
       tags: list(item.tags),
       severity: text(item.severity || "unknown").toLowerCase(),
       confidence: text(item.confidence || "unknown").toLowerCase(),
-      maturity: text(item.maturity || "unknown"),
+      maturity: Math.max(1, Math.min(4, Math.trunc(number(item.maturity, 1)))),
       status: text(item.status || "unknown").toLowerCase(),
       quality_score: quality,
       quality_breakdown: plain(item.quality_breakdown) || {},
@@ -288,9 +288,11 @@
       }).join(" ");
       const threatGroups = normalizeText(groupText);
       const haystack = normalizeText(`${flattenStrings(playbook).join(" ")} ${groupText}`);
+      const haystackWords = haystack.split(" ").filter(Boolean);
       index.set(playbook.id, {
         id, name, tactics, platforms, sources, threatGroups, haystack,
-        words: [...new Set(haystack.split(" ").filter(word => word.length > 1))]
+        words: [...new Set(haystackWords.filter(word => word.length > 1))],
+        numericTokens: [...new Set(haystackWords.filter(word => /^\d+$/.test(word)))]
       });
     });
     return index;
@@ -333,7 +335,13 @@
     if (!entry) return -1;
     let score = 0;
     for (const token of tokens) {
-      const inHaystack = entry.haystack.includes(token);
+      // Numbers are identifiers in this interface (event IDs, ports, case IDs, and so on).
+      // Treating them as arbitrary substrings makes a query such as "4778" match an unrelated
+      // SHA-256 value that merely contains those digits. Normal words intentionally retain the
+      // forgiving substring behaviour used by the type-ahead search.
+      const inHaystack = /^\d+$/.test(token)
+        ? (entry.numericTokens || entry.words).includes(token)
+        : entry.haystack.includes(token);
       if (!inHaystack && !fuzzyWordMatch(entry.words, token)) return -1;
       if (entry.id === token) score += 160;
       else if (entry.id.startsWith(token)) score += 110;
@@ -472,6 +480,7 @@
   }
 
   function markdownBlock(block) {
+    if (block == null) return "";
     if (typeof block === "string") return block;
     const type = text(block?.type).toLowerCase();
     if (["code", "query"].includes(type)) return `\`\`\`${text(block.language)}\n${text(block.code || block.query || block.text)}\n\`\`\``;
@@ -484,41 +493,51 @@
       const labels = columns.map(column => column.label);
       return `| ${labels.join(" | ")} |\n| ${labels.map(() => "---").join(" | ")} |\n${block.rows.map(row => `| ${(Array.isArray(row) ? row : columns.map(column => row?.[column.key])).map(markdownValue).join(" | ")} |`).join("\n")}`;
     }
-    if (type === "key_value") return (block.items || []).map(item => `- **${text(item?.label)}:** ${markdownValue(item?.value)}`).join("\n");
+    if (type === "key_value") return (Array.isArray(block.items) ? block.items : []).map(item => `- **${text(item?.label)}:** ${markdownValue(item?.value)}`).join("\n");
     if (type === "callout") return `${block.title ? `**${text(block.title)}**\n\n` : ""}${text(block.text)}`;
     return markdownValue(block.text || block.value || block.items || block.entries || block);
   }
 
   function serializePlaybookMarkdown(playbook) {
+    const tactics = Array.isArray(playbook?.tactics) ? playbook.tactics : [];
+    const platforms = Array.isArray(playbook?.platforms) ? playbook.platforms : [];
+    const threatGroups = Array.isArray(playbook?.threat_groups) ? playbook.threat_groups : [];
     const lines = [
-      `# ${playbook.id}: ${playbook.name}`,
+      `# ${text(playbook?.id)}: ${text(playbook?.name)}`,
       "",
-      playbook.description,
+      text(playbook?.description),
       "",
-      `- **Kind:** ${playbook.kind}`,
-      `- **Tactics:** ${playbook.tactics.join(", ") || "Not specified"}`,
-      `- **Platforms:** ${playbook.platforms.join(", ") || "Not specified"}`,
-      `- **Threat groups:** ${playbook.threat_groups.join(", ") || "None recorded"}`,
-      `- **Severity:** ${playbook.severity}`,
-      `- **Confidence:** ${playbook.confidence}`,
-      `- **Maturity:** ${playbook.maturity}`,
-      `- **Status:** ${playbook.status}`,
-      `- **Quality score:** ${playbook.quality_score}/100`,
+      `- **Kind:** ${text(playbook?.kind)}`,
+      `- **Tactics:** ${tactics.join(", ") || "Not specified"}`,
+      `- **Platforms:** ${platforms.join(", ") || "Not specified"}`,
+      `- **Threat groups:** ${threatGroups.join(", ") || "None recorded"}`,
+      `- **Severity:** ${text(playbook?.severity)}`,
+      `- **Confidence:** ${text(playbook?.confidence)}`,
+      `- **Maturity:** ${text(playbook?.maturity)}`,
+      `- **Status:** ${text(playbook?.status)}`,
+      `- **Quality score:** ${number(playbook?.quality_score, 0)}/100`,
       ""
     ];
-    if (playbook.content_sections.length) {
-      playbook.content_sections.forEach(section => {
+    const contentSections = Array.isArray(playbook?.content_sections) ? playbook.content_sections : [];
+    if (contentSections.length) {
+      contentSections.forEach(section => {
+        if (!section || typeof section !== "object") return;
         lines.push(`## ${text(section.title || section.id)}`, "");
-        (Array.isArray(section.blocks) ? section.blocks : []).forEach(block => lines.push(markdownBlock(block), ""));
+        (Array.isArray(section?.blocks) ? section.blocks : []).forEach(block => {
+          const rendered = markdownBlock(block);
+          if (rendered) lines.push(rendered, "");
+        });
       });
-    } else {
-      lines.push("## Telemetry requirements", "", markdownValue(playbook.telemetry_requirements), "");
-      lines.push("## Detection", "", markdownValue(playbook.detection), "");
-      lines.push("## Queries", "", markdownValue(playbook.queries), "");
-      lines.push("## Validation", "", markdownValue(playbook.validation), "");
-      lines.push("## Incident response", "", markdownValue(playbook.response), "");
-      lines.push("## Lifecycle", "", markdownValue(playbook.lifecycle), "");
     }
+    // Legacy prose remains useful context, but it is not a substitute for the canonical v4
+    // structures. Always export both so enriched telemetry and operational guidance cannot
+    // silently disappear simply because content_sections is populated.
+    lines.push("## Telemetry requirements", "", markdownValue(playbook?.telemetry_requirements || []), "");
+    lines.push("## Detection", "", markdownValue(playbook?.detection || {}), "");
+    lines.push("## Queries", "", markdownValue(playbook?.queries || []), "");
+    lines.push("## Validation", "", markdownValue(playbook?.validation || {}), "");
+    lines.push("## Incident response", "", markdownValue(playbook?.response || {}), "");
+    lines.push("## Lifecycle", "", markdownValue(playbook?.lifecycle || {}), "");
     return lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim() + "\n";
   }
 
@@ -526,8 +545,97 @@
     return plain(playbook);
   }
 
-  function serializePlaybooksJson(playbooks, meta = {}) {
-    return JSON.stringify({ meta: plain(meta), playbooks: playbooks.map(exportRecord) }, null, 2) + "\n";
+  function exportCounts(playbooks) {
+    const counts = { total: playbooks.length, technique: 0, operational: 0, platform: 0 };
+    playbooks.forEach(playbook => {
+      if (Object.hasOwn(counts, playbook?.kind)) counts[playbook.kind]++;
+    });
+    return counts;
+  }
+
+  function exportGroupDirectory(playbooks, groups) {
+    const directory = new Map(normalizeGroups(groups).map(group => [group.id, group]));
+    const referenced = [];
+    const seen = new Set();
+    playbooks.forEach(playbook => {
+      (Array.isArray(playbook?.threat_groups) ? playbook.threat_groups : []).forEach(groupId => {
+        const id = text(groupId);
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          referenced.push(id);
+        }
+      });
+    });
+    return referenced.map(id => directory.get(id) || {
+      id,
+      name: id,
+      aliases: [],
+      url: `https://attack.mitre.org/groups/${encodeURIComponent(id)}/`
+    });
+  }
+
+  function exportQualitySummary(playbooks) {
+    const scores = playbooks.map(playbook => number(playbook?.quality_score, 0));
+    const validation = {};
+    const readiness = {};
+    playbooks.forEach(playbook => {
+      increment(validation, validationStatus(playbook));
+      increment(readiness, playbook?.coverage?.telemetry_readiness || (playbook?.telemetry_requirements?.length ? "documented" : "missing"));
+    });
+    return {
+      average: scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : 0,
+      minimum: scores.length ? Math.min(...scores) : 0,
+      maximum: scores.length ? Math.max(...scores) : 0,
+      validation_status: validation,
+      telemetry_readiness: readiness
+    };
+  }
+
+  // Supported forms are (playbooks, meta, groups), (playbooks, { meta, groups }), and the
+  // historical (playbooks, meta). The historical form receives safe ATT&CK group stubs for any
+  // referenced IDs so its root remains self-contained; callers should pass the real directory
+  // when names and aliases are available.
+  function serializePlaybooksJson(playbooks, metaOrOptions = {}, groups = []) {
+    const records = (Array.isArray(playbooks) ? playbooks : []).map(exportRecord);
+    const wrapped = metaOrOptions && typeof metaOrOptions === "object"
+      && metaOrOptions.meta && typeof metaOrOptions.meta === "object";
+    const sourceMeta = plain(wrapped ? metaOrOptions.meta : metaOrOptions) || {};
+    const sourceGroups = wrapped ? metaOrOptions.groups : groups;
+    const exportedGroups = exportGroupDirectory(records, sourceGroups);
+    const counts = exportCounts(records);
+    const generated = /^\d{4}-\d{2}-\d{2}$/.test(text(sourceMeta.generated || sourceMeta.last_updated))
+      ? text(sourceMeta.generated || sourceMeta.last_updated)
+      : new Date().toISOString().slice(0, 10);
+    const attack = plain(sourceMeta.attack);
+    const inferredAttackVersion = records.flatMap(playbook => playbook?.telemetry_requirements || [])
+      .flatMap(source => source?.event_ids || [])
+      .map(eventId => text(eventId?.provenance).match(/^attack-v([\d.]+)-verified$/i)?.[1])
+      .find(Boolean);
+    const attackVersion = text(attack?.version || inferredAttackVersion || "0.0");
+    const qualityModel = plain(sourceMeta.quality_model);
+    const metadata = {
+      ...sourceMeta,
+      schema_version: text(sourceMeta.schema_version || records[0]?.schema_version || "4.0.0"),
+      content_version: text(sourceMeta.content_version || "4.0.0"),
+      generated,
+      counts,
+      tactic_order: list(sourceMeta.tactic_order).length ? list(sourceMeta.tactic_order) : [...TACTICS],
+      attack: { domain: "unspecified", ...(attack && Object.keys(attack).length ? attack : {}), version: attackVersion },
+      quality_model: qualityModel && Object.keys(qualityModel).length ? qualityModel : { version: "unspecified" },
+      quality_summary: exportQualitySummary(records),
+      threat_groups_summary: {
+        ...(plain(sourceMeta.threat_groups_summary) || {}),
+        total_groups: exportedGroups.length,
+        playbooks_with_groups: records.filter(playbook => Array.isArray(playbook?.threat_groups) && playbook.threat_groups.length).length,
+        total_playbook_group_mappings: records.reduce((total, playbook) => total + (Array.isArray(playbook?.threat_groups) ? playbook.threat_groups.length : 0), 0),
+        attack_version: attackVersion
+      }
+    };
+    // These enrichment counters describe the source corpus and cannot be inferred honestly for
+    // an arbitrary subset export. Omitting them is preferable to publishing stale full-corpus
+    // counts alongside a one-playbook download.
+    delete metadata.telemetry_enrichment_summary;
+    return JSON.stringify({ meta: metadata, groups: exportedGroups, playbooks: records }, null, 2) + "\n";
   }
 
   function formulaSafe(value) {
@@ -632,7 +740,7 @@
     const telemetry = Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [];
     const required = telemetry.filter(source => text(source?.tier).toLowerCase() === "required");
     const verified = telemetry.reduce((total, source) => total
-      + (Array.isArray(source?.event_ids) ? source.event_ids.filter(id => /verified$/.test(text(id?.provenance))).length : 0), 0);
+      + (Array.isArray(source?.event_ids) ? source.event_ids.filter(id => /^attack-v\d+(?:\.\d+)*-verified$/i.test(text(id?.provenance))).length : 0), 0);
     return {
       hypothesis: text(playbook?.detection?.hypothesis),
       objective: text(playbook?.detection?.objective),
@@ -643,9 +751,21 @@
       telemetryCount: telemetry.length,
       queryCount: Array.isArray(playbook?.queries) ? playbook.queries.length : 0,
       verifiedEventIds: verified,
-      validationStatus: text(playbook?.validation?.status || "planned"),
+      validationStatus: validationStatus(playbook),
       groupCount: Array.isArray(playbook?.threat_groups) ? playbook.threat_groups.length : 0
     };
+  }
+
+  function falsePositiveGuidance(value, limit = 8) {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, limit).map(item => {
+      if (typeof item === "string") return text(item);
+      if (!item || typeof item !== "object") return text(item);
+      const cause = text(item.cause || item.title || item.name || item.id);
+      const evidence = text(item.distinguishing_evidence || item.evidence || item.guidance || item.rationale);
+      if (cause && evidence) return `${cause} Distinguishing evidence: ${evidence}`;
+      return cause || evidence || flattenStrings(item).map(text).filter(Boolean).join(" ");
+    }).filter(Boolean);
   }
 
   // Hunt is assembled from fields that exist but were previously buried inside nested records.
@@ -653,7 +773,17 @@
     const detection = playbook?.detection || {};
     const response = playbook?.response || {};
     const strategies = (Array.isArray(detection.strategies) ? detection.strategies : [])
-      .map(strategy => ({ title: text(strategy?.title), signals: list(strategy?.primary_signals, 6) }))
+      .map(strategy => {
+        if (typeof strategy === "string") return { id: "", title: text(strategy), logic: "", signals: [] };
+        const id = text(strategy?.id);
+        const logic = text(strategy?.logic || strategy?.summary || strategy?.description);
+        const title = text(strategy?.title || strategy?.name || id || logic);
+        const signals = list([
+          ...(logic ? [logic] : []),
+          ...(Array.isArray(strategy?.primary_signals) ? strategy.primary_signals : [])
+        ], 6);
+        return { id, title, logic, signals };
+      })
       .filter(strategy => strategy.title || strategy.signals.length);
     return {
       hypothesis: text(detection.hypothesis),
@@ -666,7 +796,7 @@
         .filter(step => step.title),
       scoping: (Array.isArray(response.scoping) ? response.scoping : [])
         .map(flowLabel).filter(Boolean),
-      falsePositives: list(detection.false_positives, 8)
+      falsePositives: falsePositiveGuidance(detection.false_positives, 8)
     };
   }
 
@@ -901,6 +1031,70 @@
     return output;
   }
 
+  async function refreshServiceWorkerRevision({ currentRevision, loadRevision, registerRevision, updateRegistration }) {
+    const nextRevision = await loadRevision();
+    if (nextRevision && nextRevision !== currentRevision) {
+      await registerRevision(nextRevision);
+      return nextRevision;
+    }
+    await updateRegistration?.();
+    return currentRevision;
+  }
+
+  function waitForServiceWorkerRevision(registration, scriptUrl, timeoutMs = null) {
+    const target = String(scriptUrl);
+    const matchingWorker = () => [registration.installing, registration.waiting, registration.active]
+      .find(worker => worker?.scriptURL === target);
+    const waitForReadyState = worker => new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        worker.removeEventListener?.("statechange", check);
+      };
+      const check = () => {
+        if (["installed", "activated"].includes(worker.state)) {
+          cleanup();
+          resolve(worker);
+        } else if (worker.state === "redundant") {
+          cleanup();
+          reject(new Error("The service-worker candidate became redundant before installation."));
+        }
+      };
+      worker.addEventListener?.("statechange", check);
+      if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("Timed out waiting for the service-worker candidate to install."));
+        }, timeoutMs);
+      }
+      check();
+    });
+
+    const existing = matchingWorker();
+    if (existing) return waitForReadyState(existing);
+    return new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        registration.removeEventListener?.("updatefound", check);
+      };
+      const check = () => {
+        const worker = matchingWorker();
+        if (!worker) return;
+        cleanup();
+        waitForReadyState(worker).then(resolve, reject);
+      };
+      registration.addEventListener?.("updatefound", check);
+      if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("The expected service-worker candidate was not created."));
+        }, timeoutMs);
+      }
+      check();
+    });
+  }
+
   globalThis.PlaybookCore = Object.freeze({
     TACTICS,
     FILTER_KEYS,
@@ -927,6 +1121,8 @@
     escapeCsvCell,
     safeFilename,
     qualitySummary,
-    coverageSummary
+    coverageSummary,
+    refreshServiceWorkerRevision,
+    waitForServiceWorkerRevision
   });
 })();
