@@ -37,7 +37,7 @@ jobs:
         run: npm run build
 
       - name: Reject generated-artifact drift
-        run: git diff --exit-code -- standalone.html
+        run: git diff --exit-code -- standalone.html data/revision.json
 
       - name: Run full quality gate
         run: npm run check
@@ -51,7 +51,7 @@ jobs:
           mkdir -p _site/assets _site/data
           cp index.html standalone.html manifest.webmanifest service-worker.js README.md LICENSE .nojekyll _site/
           cp assets/app.js assets/core.js assets/style.css assets/icon.svg _site/assets/
-          cp data/playbooks.json data/playbooks.schema.json _site/data/
+          cp data/playbooks.json data/playbooks.schema.json data/event-catalog.json data/attack-analytics.json data/revision.json _site/data/
 
       - name: Upload verified site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

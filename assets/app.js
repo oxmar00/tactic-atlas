@@ -13,6 +13,8 @@
     playbooks: [],
     byId: new Map(),
     groupsById: new Map(),
+    eventCatalogById: new Map(),
+    runtimeRevision: null,
     searchIndex: new Map(),
     filtered: [],
     view: "matrix",
@@ -40,19 +42,23 @@
     renderTimer: 0,
     searchTimer: 0,
     toastTimer: 0,
+    panelStatusTimer: 0,
+    panelReturnFocus: null,
+    pendingPanelFocus: null,
     theme: "dark",
     swRegistration: null,
+    swRevision: null,
     refreshing: false
   };
 
   const requiredIds = [
     "q", "kind", "technique", "platform", "source", "group", "severity", "maturity", "status", "sort",
     "favorites", "recent", "v-matrix", "v-list", "v-table", "v-dashboard", "tac-all", "tacbar",
-    "clear", "empty-clear", "result-count", "active-filter-chips", "loading", "matrix", "list", "table", "dashboard", "empty",
+    "clear", "empty-clear", "result-count", "active-filter-chips", "loading", "matrix-shell", "matrix-header-scroll", "matrix-headings", "matrix-scroll", "matrix", "list", "table", "dashboard", "empty",
     "theme", "command-button", "data-version", "data-freshness", "foot-count",
     "foot-quality", "panel", "p-id", "p-kind", "p-score", "p-name", "p-description", "p-tags", "p-groups", "p-stages", "p-toc",
     "p-body", "p-save", "p-copy", "p-print", "p-export-md", "p-export-json", "p-export-svg", "p-close", "p-prev", "p-next",
-    "p-position", "command-palette", "command-q", "command-results", "command-close", "toast", "offline-banner",
+    "p-position", "p-status", "command-palette", "command-q", "command-results", "command-close", "toast", "offline-banner",
     "update-banner", "update-reload", "update-dismiss"
   ];
   const ui = {};
@@ -92,11 +98,22 @@
     bindStaticEvents();
     updateOnlineState();
     const embedded = document.getElementById("playbook-data");
-    const raw = embedded ? JSON.parse(embedded.textContent) : await fetchData();
+    const [raw, eventCatalog, runtimeRevision] = await Promise.all([
+      embedded ? Promise.resolve(JSON.parse(embedded.textContent)) : fetchData(),
+      loadEventCatalog(),
+      embedded || globalThis.__ATTACK_PLAYBOOK_STANDALONE__ ? Promise.resolve(null) : loadRuntimeRevision()
+    ]);
     state.data = Core.normalizeDataset(raw);
     state.playbooks = state.data.playbooks;
     state.byId = new Map(state.playbooks.map(playbook => [playbook.id, playbook]));
     state.groupsById = new Map(state.data.groups.map(group => [group.id, group]));
+    state.eventCatalogById = eventCatalog.reduce((index, event) => {
+      const id = String(event.event_id);
+      if (!index.has(id)) index.set(id, []);
+      index.get(id).push(event);
+      return index;
+    }, new Map());
+    state.runtimeRevision = runtimeRevision;
     // Indexing 231 full records costs ~1.6s. Defer it so first paint is not blocked; any
     // search that lands before it finishes builds it on demand.
     state.searchIndex = new Map();
@@ -104,7 +121,7 @@
     state.favorites = new Set([...state.favorites].filter(id => state.byId.has(id)).slice(0, 500));
     state.recent = state.recent.filter(id => state.byId.has(id)).slice(0, RECENT_LIMIT);
     initializeFacets();
-    applyLocationState(true);
+    applyLocationState();
     renderDatasetMeta();
     ui.loading.remove();
     scheduleRender(false);
@@ -128,6 +145,37 @@
     const response = await fetch("data/playbooks.json", { credentials: "same-origin", cache: "no-cache" });
     if (!response.ok) throw new Error(`Playbook data request failed (${response.status}).`);
     return response.json();
+  }
+
+  async function loadEventCatalog() {
+    try {
+      const embedded = document.getElementById("event-catalog-data");
+      let raw;
+      if (embedded) raw = JSON.parse(embedded.textContent);
+      else {
+        const response = await fetch("data/event-catalog.json", { credentials: "same-origin", cache: "no-cache" });
+        if (!response.ok) throw new Error(`Event catalog request failed (${response.status}).`);
+        raw = await response.json();
+      }
+      return Array.isArray(raw?.events)
+        ? raw.events.filter(event => event && typeof event === "object" && event.event_id != null)
+        : [];
+    } catch (error) {
+      console.warn("Event catalog unavailable; event references will use playbook metadata only.", error);
+      return [];
+    }
+  }
+
+  async function loadRuntimeRevision() {
+    try {
+      const response = await fetch("data/revision.json", { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) return null;
+      const raw = await response.json();
+      const revision = typeof raw?.revision === "string" ? raw.revision.trim().toLowerCase() : "";
+      return /^sha256-[a-f0-9]{64}$/.test(revision) ? revision : null;
+    } catch {
+      return null;
+    }
   }
 
   function bindStaticEvents() {
@@ -163,8 +211,9 @@
     ui["command-button"].addEventListener("click", openCommandPalette);
     ui["command-close"].addEventListener("click", closeCommandPalette);
     ui["command-q"].addEventListener("input", renderCommandResults);
-    ui["command-q"].addEventListener("keydown", navigateCommandResults);
+    ui["command-palette"].addEventListener("keydown", navigateCommandResults);
     ui["command-results"].addEventListener("click", handleCommandClick);
+    bindMatrixScrolling();
     ui.panel.addEventListener("cancel", event => { event.preventDefault(); requestClosePanel(); });
     ui.panel.addEventListener("click", event => { if (event.target === ui.panel) requestClosePanel(); });
     ui.panel.addEventListener("close", syncModalState);
@@ -187,9 +236,21 @@
     ui["update-dismiss"].addEventListener("click", () => { ui["update-banner"].hidden = true; });
     window.addEventListener("online", updateOnlineState);
     window.addEventListener("offline", updateOnlineState);
-    window.addEventListener("popstate", () => applyLocationState(false));
-    window.addEventListener("hashchange", () => applyLocationState(false));
+    window.addEventListener("popstate", applyLocationState);
+    window.addEventListener("hashchange", applyLocationState);
     document.addEventListener("keydown", handleGlobalKeys);
+  }
+
+  function bindMatrixScrolling() {
+    let syncing = false;
+    const mirror = (source, target) => {
+      if (syncing || target.scrollLeft === source.scrollLeft) return;
+      syncing = true;
+      target.scrollLeft = source.scrollLeft;
+      requestAnimationFrame(() => { syncing = false; });
+    };
+    ui["matrix-scroll"].addEventListener("scroll", () => mirror(ui["matrix-scroll"], ui["matrix-header-scroll"]), { passive: true });
+    ui["matrix-header-scroll"].addEventListener("scroll", () => mirror(ui["matrix-header-scroll"], ui["matrix-scroll"]), { passive: true });
   }
 
   function initializeFacets() {
@@ -245,18 +306,20 @@
     select.replaceChildren(fragment);
   }
 
-  function applyLocationState(initial) {
+  function applyLocationState() {
     if (!state.data) return;
+    const previousOpenId = state.openId;
     const decoded = Core.decodeUrlState(location.search, location.hash);
     const params = new URLSearchParams(location.search);
     state.query = decoded.query;
-    state.view = params.has("view") ? decoded.view : initial ? state.preferredView : decoded.view;
+    state.view = params.has("view") ? decoded.view : state.preferredView;
     state.sort = params.has("sort") ? decoded.sort : state.query ? "relevance" : "id";
     ["kind", "technique", "platform", "source", "group", "severity", "maturity", "status"].forEach(key => { state[key] = decoded[key]; });
     state.tactics = new Set(decoded.tactics.filter(tactic => state.data.meta.tactic_order.includes(tactic)));
     state.favoritesOnly = decoded.favoritesOnly;
     state.recentOnly = decoded.recentOnly;
     const nextId = decoded.openId && state.byId.has(decoded.openId) ? decoded.openId : null;
+    if (previousOpenId && !nextId) state.pendingPanelFocus ||= state.panelReturnFocus || { id: previousOpenId, occurrence: 0 };
     state.openId = nextId;
     syncControls();
     scheduleRender(false);
@@ -327,13 +390,15 @@
     }, state.query ? ensureSearchIndex() : state.searchIndex);
     const renderers = { matrix: renderMatrix, list: renderList, table: renderTable, dashboard: renderDashboard };
     renderers[state.view]();
-    ["matrix", "list", "table", "dashboard"].forEach(view => { ui[view].hidden = view !== state.view || state.filtered.length === 0; });
+    ["list", "table", "dashboard"].forEach(view => { ui[view].hidden = view !== state.view || state.filtered.length === 0; });
+    ui["matrix-shell"].hidden = state.view !== "matrix" || state.filtered.length === 0;
     ui.empty.hidden = state.filtered.length > 0;
     ui["result-count"].textContent = state.filtered.length === state.playbooks.length ? `${state.playbooks.length} playbooks` : `${state.filtered.length} of ${state.playbooks.length} playbooks`;
     ui.clear.hidden = !hasActiveFilters();
     renderActiveFilters();
     syncControls();
     syncPanelNavigation();
+    restorePanelFocus();
     if (updateUrl) writeUrl("replace");
   }
 
@@ -429,8 +494,8 @@
     const button = make("button", `playbook-card ${toneClass(tone)}`);
     button.type = "button";
     button.dataset.openId = playbook.id;
-    button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id); });
-    button.setAttribute("aria-label", `${playbook.id}: ${playbook.name}. ${playbook.severity} severity. Quality ${playbook.quality_score}. ${state.favorites.has(playbook.id) ? "Saved." : ""}`);
+    button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id, { trigger: event.currentTarget }); });
+    button.setAttribute("aria-label", `${playbook.id}: ${playbook.name}. ${playbook.severity} severity. Quality ${playbook.quality_score}.${state.favorites.has(playbook.id) ? " Saved." : ""}`);
     const top = make("span", "card-top");
     top.append(make("span", "card-id", playbook.id));
     if (state.favorites.has(playbook.id)) top.append(make("span", "card-save", "★"));
@@ -444,22 +509,26 @@
 
   function renderMatrix() {
     const fragment = document.createDocumentFragment();
+    const headings = document.createDocumentFragment();
     const groups = [...state.data.meta.tactic_order, "Operational", "Platform"];
     groups.forEach(group => {
       const items = state.filtered.filter(playbook => group === "Operational" ? playbook.kind === "operational" : group === "Platform" ? playbook.kind === "platform" : playbook.kind === "technique" && playbook.tactics.includes(group));
       if (!items.length) return;
       const section = make("section", `tactic-column ${toneClass(group)}`);
-      const heading = make("header", "column-header");
+      const heading = make("div", `column-header ${toneClass(group)}`);
       const title = make("h2", null, group);
       title.id = `matrix-${Core.slugify(group)}`;
-      heading.append(title, make("span", null, `${items.length} playbook${items.length === 1 ? "" : "s"}`));
       section.setAttribute("aria-labelledby", title.id);
       const cards = make("div", "column-cards");
       items.forEach(playbook => cards.append(playbookCard(playbook, group)));
-      section.append(heading, cards);
+      section.append(cards);
+      heading.append(title, make("span", null, `${items.length} playbook${items.length === 1 ? "" : "s"}`));
+      headings.append(heading);
       fragment.append(section);
     });
+    ui["matrix-headings"].replaceChildren(headings);
     ui.matrix.replaceChildren(fragment);
+    ui["matrix-header-scroll"].scrollLeft = ui["matrix-scroll"].scrollLeft;
   }
 
   function renderList() {
@@ -487,8 +556,8 @@
     const button = make("button", `list-row ${toneClass(group)}`);
     button.type = "button";
     button.dataset.openId = playbook.id;
-    button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id); });
-    button.setAttribute("aria-label", `${playbook.id}: ${playbook.name}. ${playbook.severity} severity. Quality ${playbook.quality_score}.`);
+    button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id, { trigger: event.currentTarget }); });
+    button.setAttribute("aria-label", `${playbook.id}: ${playbook.name}. ${playbook.severity} severity. Quality ${playbook.quality_score}.${state.favorites.has(playbook.id) ? " Saved." : ""}`);
     const copy = make("span", "row-copy");
     const name = make("span", "row-name");
     appendHighlighted(name, playbook.name);
@@ -514,7 +583,7 @@
       return;
     }
     const open = event.target.closest("[data-open-id]");
-    if (open) { openPlaybook(open.dataset.openId); return; }
+    if (open) { openPlaybook(open.dataset.openId, { trigger: open }); return; }
     const drill = event.target.closest("[data-filter-key]");
     if (!drill) return;
     const key = drill.dataset.filterKey;
@@ -544,7 +613,7 @@
       const open = make("button", "table-open", `${playbook.id}: ${playbook.name}`);
       open.type = "button";
       open.dataset.openId = playbook.id;
-      open.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id); });
+      open.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id, { trigger: event.currentTarget }); });
       identity.append(open, make("span", "table-sub", playbook.description));
       const groupNames = playbook.threat_groups.map(id => state.groupsById.get(id)?.name || id);
       row.append(identity, tagCell(playbook.tactics), tagCell(playbook.platforms), tagCell(groupNames));
@@ -664,7 +733,7 @@
       const button = make("button", "gap-item");
       button.type = "button";
       button.dataset.openId = playbook.id;
-      button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id); });
+      button.addEventListener("click", event => { event.stopPropagation(); openPlaybook(playbook.id, { trigger: event.currentTarget }); });
       button.append(make("span", "gap-id", playbook.id), make("span", "gap-name", playbook.name), make("span", severityClass(playbook.severity), humanize(playbook.severity)));
       list.append(button);
     });
@@ -677,6 +746,15 @@
     const playbook = state.byId.get(id);
     if (!playbook) return;
     const wasOpen = ui.panel.open;
+    if (!wasOpen) {
+      const active = options.trigger instanceof Element ? options.trigger : document.activeElement;
+      const trigger = active instanceof Element ? active.closest("[data-open-id]") : null;
+      const candidates = visiblePlaybookTriggers(trigger?.dataset.openId || id);
+      state.panelReturnFocus = trigger
+        ? { id: trigger.dataset.openId, occurrence: Math.max(0, candidates.indexOf(trigger)) }
+        : options.historyMode === "none" ? null : { id, occurrence: 0 };
+      state.pendingPanelFocus = null;
+    }
     state.openId = id;
     renderPanel(playbook);
     if (options.recordRecent !== false) rememberRecent(id);
@@ -690,6 +768,9 @@
   }
 
   function renderPanel(playbook) {
+    clearTimeout(state.panelStatusTimer);
+    ui["p-status"].classList.remove("show");
+    ui["p-status"].textContent = "";
     ui["p-id"].textContent = playbook.id;
     ui["p-kind"].textContent = humanize(playbook.kind);
     ui["p-score"].textContent = `Quality ${playbook.quality_score}`;
@@ -895,6 +976,7 @@
   }
 
   function renderBlock(parent, block) {
+    if (block == null) { parent.append(make("p", "metric-note", "No content is available for this block.")); return; }
     if (typeof block === "string") { parent.append(make("p", null, block)); return; }
     const type = String(block?.type || "structured").toLowerCase();
     if (type === "paragraph") { parent.append(make("p", null, block.text)); return; }
@@ -1138,12 +1220,70 @@
       const heading = make("h4", null, source.category || source.id || "Telemetry source");
       heading.append(make("span", "source-priority", source.priority || source.tier || "recommended"));
       card.append(heading);
-      const items = Object.entries(source).filter(([key, value]) => !["id", "category", "priority", "tier"].includes(key) && nonEmpty(value)).map(([key, value]) => ({ label: humanize(key), value }));
+      const items = Object.entries(source).filter(([key, value]) => !["id", "category", "priority", "tier", "event_ids"].includes(key) && nonEmpty(value)).map(([key, value]) => ({ label: humanize(key), value }));
       renderKeyValueBlock(card, items);
+      renderTelemetryEvents(card, Array.isArray(source.event_ids) ? source.event_ids : [], source);
       grid.append(card);
     });
     if (!sources.length) grid.append(make("p", "metric-note", "No structured telemetry requirement is available."));
     parent.append(grid);
+  }
+
+  function renderTelemetryEvents(parent, eventIds, telemetrySource) {
+    if (!eventIds.length) return;
+    const section = make("section", "event-catalog");
+    section.append(make("h5", null, `Event references (${eventIds.length})`));
+    const list = make("div", "event-catalog-list");
+    eventIds.forEach(reference => {
+      const eventId = String(reference?.id ?? reference?.event_id ?? reference ?? "").trim();
+      if (!eventId) return;
+      const catalog = eventCatalogMatch(eventId, reference, telemetrySource);
+      const details = make("details", "event-reference");
+      const provider = String(reference?.provider || catalog?.log_source || "Event");
+      const summary = make("summary");
+      summary.append(make("span", "event-id", `${provider} ${eventId}`));
+      if (catalog?.name) summary.append(make("span", "event-name", catalog.name));
+      details.append(summary);
+      if (reference?.description) details.append(make("p", "event-description", reference.description));
+      const items = [];
+      if (catalog?.use_for?.length) items.push({ label: "Use for", value: catalog.use_for });
+      if (catalog?.fields?.length) items.push({ label: "Fields to collect", value: catalog.fields });
+      if (catalog?.investigation?.length) items.push({ label: "Investigation", value: catalog.investigation });
+      if (catalog?.conditional) items.push({ label: "Collection policy", value: catalog.conditional });
+      if (reference?.provenance) items.push({ label: "Provenance", value: reference.provenance });
+      const extra = reference && typeof reference === "object"
+        ? Object.entries(reference)
+          .filter(([key, value]) => !["id", "event_id", "provider", "description", "provenance"].includes(key) && nonEmpty(value))
+          .map(([key, value]) => ({ label: humanize(key), value }))
+        : [];
+      if (items.length || extra.length) renderKeyValueBlock(details, [...items, ...extra]);
+      list.append(details);
+    });
+    if (list.childElementCount) {
+      section.append(list);
+      parent.append(section);
+    }
+  }
+
+  function eventCatalogMatch(eventId, reference, telemetrySource) {
+    const candidates = state.eventCatalogById.get(eventId) || [];
+    if (candidates.length <= 1) return candidates[0];
+    const generic = new Set(["microsoft", "windows", "event", "events", "log", "logs", "wineventlog", "endpoint", "edr", "host", "comprehensive"]);
+    const tokens = value => new Set(Core.normalizeText(value).split(/[^a-z0-9]+/).filter(token => token && !generic.has(token)));
+    const context = tokens([
+      reference?.provider,
+      telemetrySource?.provider,
+      telemetrySource?.log_source,
+      telemetrySource?.source_name,
+      telemetrySource?.source_heading,
+      telemetrySource?.id,
+      telemetrySource?.category
+    ].filter(Boolean).join(" "));
+    const scored = candidates.map(candidate => ({
+      candidate,
+      score: [...tokens(candidate.log_source)].filter(token => context.has(token)).length
+    })).sort((a, b) => b.score - a.score);
+    return scored[0]?.score > 0 && scored[0].score > (scored[1]?.score || 0) ? scored[0].candidate : undefined;
   }
 
   function renderQueries(parent, queries) {
@@ -1182,20 +1322,40 @@
 
   function requestClosePanel() {
     if (!state.openId) return;
+    state.pendingPanelFocus = state.panelReturnFocus || { id: state.openId, occurrence: 0 };
     if (history.state?.appDialog && location.hash) history.back();
     else {
       state.openId = null;
       closePanelDirect();
       writeUrl("replace");
+      requestAnimationFrame(restorePanelFocus);
     }
   }
 
   function closePanelDirect() {
     state.openId = null;
     if (ui.panel.open) ui.panel.close();
+    clearTimeout(state.panelStatusTimer);
+    ui["p-status"].classList.remove("show");
+    ui["p-status"].textContent = "";
     ui["p-body"].replaceChildren();
     ui["p-toc"].replaceChildren();
     syncModalState();
+  }
+
+  function restorePanelFocus() {
+    if (!state.pendingPanelFocus || ui.panel.open) return;
+    const { id, occurrence } = state.pendingPanelFocus;
+    const candidates = visiblePlaybookTriggers(id);
+    const target = candidates[occurrence] || candidates[0] || ui[VIEW_IDS[state.view]];
+    state.pendingPanelFocus = null;
+    state.panelReturnFocus = null;
+    target?.focus({ preventScroll: true });
+  }
+
+  function visiblePlaybookTriggers(id) {
+    return [...document.querySelectorAll("[data-open-id]")]
+      .filter(element => element.dataset.openId === id && !element.closest("[hidden]"));
   }
 
   function syncModalState() {
@@ -1326,7 +1486,7 @@
   function exportOpenJson() {
     const playbook = state.byId.get(state.openId);
     if (!playbook) return;
-    downloadText(Core.safeFilename(`${playbook.id}-${playbook.name}`, "json"), Core.serializePlaybooksJson([playbook], state.data.meta), "application/json");
+    downloadText(Core.safeFilename(`${playbook.id}-${playbook.name}`, "json"), Core.serializePlaybooksJson([playbook], state.data.meta, state.data.groups), "application/json");
     toast("JSON export created");
   }
 
@@ -1445,16 +1605,29 @@
   }
 
   function navigateCommandResults(event) {
-    if (!['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) return;
+    if (!["ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"].includes(event.key)) return;
     if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); return; }
+    if (event.target !== ui["command-q"] && !event.target.closest("#command-results")) return;
     const items = [...ui["command-results"].querySelectorAll("button")];
     if (!items.length) return;
     const current = items.indexOf(document.activeElement);
-    if (event.key === "Enter" && current >= 0) { event.preventDefault(); items[current].click(); return; }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      items[current >= 0 ? current : 0].click();
+      return;
+    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const direction = event.key === "ArrowDown" ? 1 : -1;
       const next = current < 0 ? 0 : (current + direction + items.length) % items.length;
+      items.forEach((item, index) => { item.tabIndex = index === next ? 0 : -1; });
+      items[next].focus();
+      return;
+    }
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : items.length - 1;
+      items.forEach((item, index) => { item.tabIndex = index === next ? 0 : -1; });
       items[next].focus();
     }
   }
@@ -1525,10 +1698,25 @@
   }
 
   function toast(message) {
+    clearTimeout(state.toastTimer);
+    if (ui.panel.open) {
+      ui.toast.classList.remove("show");
+      ui.toast.textContent = "";
+      clearTimeout(state.panelStatusTimer);
+      ui["p-status"].textContent = message;
+      ui["p-status"].classList.add("show");
+      state.panelStatusTimer = setTimeout(() => {
+        ui["p-status"].classList.remove("show");
+        ui["p-status"].textContent = "";
+      }, 8000);
+      return;
+    }
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
-    clearTimeout(state.toastTimer);
-    state.toastTimer = setTimeout(() => ui.toast.classList.remove("show"), 2600);
+    state.toastTimer = setTimeout(() => {
+      ui.toast.classList.remove("show");
+      ui.toast.textContent = "";
+    }, 2600);
   }
 
   function showLoadError(error) {
@@ -1544,28 +1732,60 @@
 
   async function registerServiceWorker() {
     if (globalThis.__ATTACK_PLAYBOOK_STANDALONE__ || !("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return;
-    try {
-      const registration = await navigator.serviceWorker.register("service-worker.js");
+    const observedWorkers = new WeakSet();
+    const observedRegistrations = new WeakSet();
+    const observeWorker = worker => {
+      if (!worker || observedWorkers.has(worker)) return;
+      observedWorkers.add(worker);
+      const showReady = () => {
+        if (worker.state === "installed" && navigator.serviceWorker.controller) ui["update-banner"].hidden = false;
+      };
+      showReady();
+      worker.addEventListener("statechange", showReady);
+    };
+    const observeRegistration = registration => {
       state.swRegistration = registration;
-      const showWaiting = () => { if (registration.waiting) ui["update-banner"].hidden = false; };
-      showWaiting();
-      registration.addEventListener("updatefound", () => {
-        const worker = registration.installing;
-        worker?.addEventListener("statechange", () => {
-          if (worker.state === "installed" && navigator.serviceWorker.controller) ui["update-banner"].hidden = false;
+      if (registration.waiting) ui["update-banner"].hidden = false;
+      observeWorker(registration.installing);
+      if (!observedRegistrations.has(registration)) {
+        observedRegistrations.add(registration);
+        registration.addEventListener("updatefound", () => observeWorker(registration.installing));
+      }
+      return registration;
+    };
+    const registerRevision = async revision => {
+      const workerUrl = new URL(`service-worker.js?rev=${encodeURIComponent(revision)}`, location.href).href;
+      const registration = observeRegistration(await navigator.serviceWorker.register(workerUrl));
+      await Core.waitForServiceWorkerRevision(registration, workerUrl);
+      return registration;
+    };
+    const synchronizeRevision = async ({ notify = false, refreshManifest = true } = {}) => {
+      try {
+        const discoveredRevision = refreshManifest ? await loadRuntimeRevision() : state.runtimeRevision;
+        if (discoveredRevision) state.runtimeRevision = discoveredRevision;
+        const desiredRevision = discoveredRevision || state.runtimeRevision;
+        if (!desiredRevision) return;
+        state.swRevision = await Core.refreshServiceWorkerRevision({
+          currentRevision: state.swRevision,
+          loadRevision: async () => desiredRevision,
+          registerRevision,
+          updateRegistration: () => state.swRegistration?.update()
         });
-      });
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (state.refreshing) location.reload();
-      });
-      navigator.serviceWorker.addEventListener("message", event => {
-        if (event.data?.type === "PLAYBOOK_SW_ACTIVATED" && event.data.version !== state.data.meta.content_version) ui["update-banner"].hidden = false;
-      });
-      setInterval(() => registration.update().catch(() => {}), 60 * 60 * 1000);
-    } catch (error) {
-      console.warn("Offline support could not be registered", error);
-      toast("Offline installation is unavailable in this context");
-    }
+      } catch (error) {
+        console.warn("Offline support could not be synchronized", error);
+        if (notify) toast("Offline installation is unavailable in this context");
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (state.refreshing) location.reload();
+    });
+    navigator.serviceWorker.addEventListener("message", event => {
+      if (event.data?.type === "PLAYBOOK_SW_ACTIVATED" && event.data.revision !== state.swRevision) ui["update-banner"].hidden = false;
+    });
+    setInterval(() => synchronizeRevision(), 60 * 60 * 1000);
+    setTimeout(() => synchronizeRevision(), 60 * 1000);
+    await synchronizeRevision({ notify: true, refreshManifest: !state.runtimeRevision });
   }
 
   function activateUpdate() {

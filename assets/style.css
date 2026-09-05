@@ -316,9 +316,30 @@ button, select, input { accent-color: var(--accent); }
 .tone-impact { --tactic: #ff7180; }
 .tone-operational, .tone-platform { --tactic: #95a4ba; }
 
-.matrix-view { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(11.3rem, 1fr); gap: .65rem; overflow-x: auto; padding: .1rem .1rem 1rem; align-items: start; scrollbar-color: var(--border) transparent; }
+.matrix-shell { position: relative; }
+.matrix-header-scroll {
+  position: sticky;
+  z-index: 6;
+  top: 4.05rem;
+  overflow-x: auto;
+  background: var(--bg);
+  scrollbar-width: none;
+}
+.matrix-header-scroll::-webkit-scrollbar { display: none; }
+.matrix-header-grid, .matrix-view {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(11.3rem, 1fr);
+  gap: .65rem;
+  width: 100%;
+  align-items: start;
+}
+.matrix-header-grid { padding: .1rem .1rem 0; }
+.matrix-scroll { overflow-x: auto; padding-bottom: .2rem; scrollbar-color: var(--border) transparent; }
+.matrix-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.matrix-view { padding: .3rem .1rem .8rem; }
 .tactic-column { min-width: 11.3rem; }
-.column-header { position: sticky; top: 0; z-index: 4; min-height: 3.55rem; padding: .35rem 0 .5rem; background: var(--bg); }
+.column-header { min-width: 11.3rem; min-height: 3.55rem; padding: .35rem 0 .5rem; background: var(--bg); }
 .column-header h2 { overflow: hidden; margin: 0; padding-bottom: .4rem; border-bottom: 3px solid var(--tactic, var(--border)); font-size: .78rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .column-header span { color: var(--dim); font: .66rem var(--mono); }
 .column-cards { display: grid; gap: .4rem; margin-top: .3rem; }
@@ -425,14 +446,14 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
 :root[data-width="compact"] .playbook-dialog { width: min(58rem, calc(100vw - 2rem)); }
 :root[data-width="wide"] .playbook-dialog { width: min(92rem, calc(100vw - 2rem)); }
 .playbook-dialog::backdrop, .command-dialog::backdrop { background: rgba(3, 7, 14, .76); backdrop-filter: blur(3px); }
-.dialog-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.dialog-shell { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .playbook-header { flex: 0 0 auto; padding: 1rem 1.2rem .85rem; border-bottom: 1px solid var(--border); background: var(--surface); }
-.playbook-eyebrow { display: flex; align-items: center; gap: .4rem; }
+.playbook-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .id-badge, .status-badge, .score-badge { padding: .16rem .5rem; }
 .id-badge { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); color: var(--accent); font-weight: 800; }
 .status-badge { color: var(--muted); text-transform: capitalize; }
 .score-badge { color: var(--success); }
-.playbook-actions { display: flex; gap: .35rem; margin-left: auto; }
+.playbook-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; max-width: 100%; margin-left: auto; }
 .playbook-actions button { min-width: 2.45rem; min-height: 2.45rem; padding: .28rem .4rem; border: 1px solid var(--border); border-radius: .45rem; background: transparent; color: var(--muted); cursor: pointer; }
 .playbook-actions button:hover { border-color: var(--accent); color: var(--accent); }
 .playbook-actions button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
@@ -548,6 +569,16 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
 .telemetry-card h4 { display: flex; align-items: center; gap: .4rem; margin: 0 0 .4rem; color: var(--text); }
 .telemetry-card .source-priority { margin-left: auto; padding: .1rem .38rem; border: 1px solid var(--border); border-radius: 999px; color: var(--accent); font: .61rem var(--mono); text-transform: uppercase; }
 .telemetry-card dl { margin: 0; }
+.event-catalog { margin-top: .7rem; padding-top: .65rem; border-top: 1px solid var(--border); }
+.event-catalog h5 { margin: 0 0 .4rem; color: var(--muted); font: 700 .68rem var(--mono); text-transform: uppercase; }
+.event-catalog-list { display: grid; gap: .35rem; }
+.event-reference { border: 1px solid var(--border-soft); border-radius: .42rem; background: var(--surface); }
+.event-reference > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem; padding: .48rem .55rem; cursor: pointer; }
+.event-reference > summary::marker { color: var(--accent); }
+.event-id { color: var(--accent); font: 700 .67rem var(--mono); }
+.event-name { color: var(--text); font-size: .72rem; font-weight: 650; }
+.event-description { margin: 0; padding: 0 .55rem .5rem; color: var(--muted); font-size: .7rem; }
+.event-reference > .kv-list { margin: 0 .55rem .55rem; }
 .query-grid { display: grid; gap: .6rem; }
 .query-title { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .45rem .65rem; border-bottom: 1px solid var(--border); }
 .query-title strong { flex: 1; }
@@ -570,6 +601,8 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
 
 .toast { position: fixed; z-index: 300; bottom: max(1.2rem, env(safe-area-inset-bottom)); left: 50%; max-width: min(90vw, 34rem); padding: .65rem .85rem; border-radius: .52rem; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font: .72rem var(--mono); opacity: 0; pointer-events: none; transform: translate(-50%, 1rem); transition: opacity .16s, transform .16s; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.dialog-status { position: absolute; z-index: 20; bottom: 4.2rem; left: 50%; max-width: min(calc(100% - 2rem), 34rem); padding: .65rem .85rem; border-radius: .52rem; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font: .72rem var(--mono); opacity: 0; pointer-events: none; transform: translate(-50%, .75rem); transition: opacity .16s, transform .16s; }
+.dialog-status.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 78rem) {
   .quick-filters { grid-template-columns: repeat(4, minmax(9rem, 1fr)); }
@@ -604,7 +637,7 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
   .list-rows { grid-template-columns: 1fr; }
   .playbook-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
   .playbook-header { padding: calc(.75rem + env(safe-area-inset-top)) .75rem .65rem; }
-  .playbook-actions { gap: .22rem; }
+  .playbook-actions { flex-basis: 100%; gap: .22rem; margin-left: 0; }
   .playbook-actions button { min-width: 2.25rem; min-height: 2.25rem; }
   #p-print, #p-export-json { display: none; }
   .playbook-body { padding: .75rem; }
@@ -612,6 +645,7 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
   .kv-list { grid-template-columns: 1fr; }
   .kv-list dt { border-bottom: 0; }
   .system-banner { align-items: stretch; flex-direction: column; gap: .4rem; }
+  .matrix-header-scroll { top: 3.55rem; }
 }
 
 @media (max-width: 30rem) {
@@ -639,7 +673,7 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
   .playbook-dialog[open] { position: static; display: block; width: 100%; max-width: none; height: auto; max-height: none; margin: 0; border: 0; color: #000; box-shadow: none; }
   .dialog-shell, .playbook-layout { display: block; height: auto; overflow: visible; }
   .playbook-header { padding: 0 0 1rem; border-bottom: 1px solid #777; background: #fff; }
-  .playbook-actions, .section-nav, .playbook-navigation { display: none !important; }
+  .playbook-actions, .section-nav, .playbook-navigation, .dialog-status { display: none !important; }
   .playbook-body { overflow: visible; max-width: none; padding: 1rem 0; }
   .pb-section { break-inside: avoid; border-color: #aaa; background: #fff; }
   .pb-section:not([open]) > .section-content { display: block !important; }

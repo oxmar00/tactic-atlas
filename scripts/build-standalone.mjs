@@ -6,6 +6,20 @@ import { pathToFileURL } from "node:url";
 const root = new URL("../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 
+export const RUNTIME_REVISION_PATHS = Object.freeze([
+  "index.html",
+  "manifest.webmanifest",
+  "service-worker.js",
+  "assets/style.css",
+  "assets/core.js",
+  "assets/app.js",
+  "assets/icon.svg",
+  "data/playbooks.json",
+  "data/playbooks.schema.json",
+  "data/event-catalog.json",
+  "data/attack-analytics.json"
+]);
+
 function normalizeNewlines(value) {
   return String(value).replace(/\r\n?/g, "\n");
 }
@@ -18,6 +32,48 @@ function replaceExactlyOnce(source, pattern, replacement, label) {
     throw new Error(`Expected exactly one ${label} anchor, found ${matches.length}.`);
   }
   return source.replace(pattern, replacement);
+}
+
+function attributeValue(tag, name) {
+  const attribute = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'<>]+))`, "i").exec(tag);
+  return attribute ? (attribute[1] ?? attribute[2] ?? attribute[3] ?? "").trim() : null;
+}
+
+function assertKnownIndexAssets(html) {
+  const knownScripts = new Set(["assets/core.js", "assets/app.js"]);
+  for (const match of html.matchAll(/<script\b[^>]*>/gi)) {
+    const source = attributeValue(match[0], "src");
+    if (!source || !knownScripts.has(source.toLowerCase())) {
+      throw new Error(`Unexpected script element in index shell${source ? `: ${source}` : "."}`);
+    }
+  }
+  if (/<style\b/i.test(html)) {
+    throw new Error("Unexpected inline style element in index shell.");
+  }
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const relation = attributeValue(match[0], "rel");
+    if (!relation?.toLowerCase().split(/\s+/).includes("stylesheet")) continue;
+    const href = attributeValue(match[0], "href");
+    if (href?.toLowerCase() !== "assets/style.css") {
+      throw new Error(`Unexpected stylesheet element in index shell${href ? `: ${href}` : "."}`);
+    }
+  }
+}
+
+function assertCspCompleteness(html, scriptHashes, styleHashes) {
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];
+  const styles = [...html.matchAll(/<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi)];
+  if (scripts.length !== scriptHashes.length || styles.length !== styleHashes.length) {
+    throw new Error("Standalone output contains an unexpected script or style element.");
+  }
+  const actualScriptHashes = scripts.map(match => {
+    if (attributeValue(match[1], "src")) throw new Error("Standalone output contains an external script element.");
+    return sha256Csp(match[2]);
+  });
+  const actualStyleHashes = styles.map(match => sha256Csp(match[2]));
+  if (!scriptHashes.every(hash => actualScriptHashes.includes(hash)) || !styleHashes.every(hash => actualStyleHashes.includes(hash))) {
+    throw new Error("Standalone Content Security Policy does not cover every script and style element.");
+  }
 }
 
 function escapeInlineScript(value) {
@@ -37,8 +93,20 @@ export function sha256Csp(value) {
   return `sha256-${createHash("sha256").update(value, "utf8").digest("base64")}`;
 }
 
-export function renderStandalone({ html, css, core, app, data }) {
+export function computeRuntimeRevision(files) {
+  const hash = createHash("sha256");
+  RUNTIME_REVISION_PATHS.forEach(path => {
+    if (typeof files?.[path] !== "string") throw new Error(`Cannot calculate runtime revision without ${path}.`);
+    hash.update(`${path}\0`, "utf8");
+    hash.update(normalizeNewlines(files[path]), "utf8");
+    hash.update("\0", "utf8");
+  });
+  return `sha256-${hash.digest("hex")}`;
+}
+
+export function renderStandalone({ html, css, core, app, data, eventCatalog = "{}", attackAnalytics = "{}" }) {
   let output = normalizeNewlines(html);
+  assertKnownIndexAssets(output);
   const styleText = normalizeNewlines(css).trimEnd();
   if (/<\/style/i.test(styleText)) throw new Error("Stylesheet contains an unsafe </style sequence.");
 
@@ -46,15 +114,19 @@ export function renderStandalone({ html, css, core, app, data }) {
   const appText = escapeInlineScript(normalizeNewlines(app).trimEnd());
   const coreScript = `globalThis.__ATTACK_PLAYBOOK_STANDALONE__ = true;\n${coreText}`;
   const embeddedData = safeJsonForHtml(normalizeNewlines(data));
+  const embeddedEventCatalog = safeJsonForHtml(normalizeNewlines(eventCatalog));
+  const embeddedAttackAnalytics = safeJsonForHtml(normalizeNewlines(attackAnalytics));
 
   try { new Function(coreScript); } catch (error) { throw new Error(`Core script syntax error: ${error.message}`); }
   try { new Function(appText); } catch (error) { throw new Error(`Application script syntax error: ${error.message}`); }
 
+  const scriptHashes = [coreScript, embeddedData, embeddedEventCatalog, embeddedAttackAnalytics, appText].map(sha256Csp);
+  const styleHashes = [sha256Csp(styleText)];
   const policy = [
     "default-src 'none'",
-    `script-src '${sha256Csp(coreScript)}' '${sha256Csp(embeddedData)}' '${sha256Csp(appText)}'`,
+    `script-src ${scriptHashes.map(hash => `'${hash}'`).join(" ")}`,
     "style-src 'unsafe-inline'",
-    `style-src-elem '${sha256Csp(styleText)}'`,
+    `style-src-elem '${styleHashes[0]}'`,
     "style-src-attr 'unsafe-inline'",
     "img-src data:",
     "connect-src 'none'",
@@ -87,7 +159,7 @@ export function renderStandalone({ html, css, core, app, data }) {
   output = replaceExactlyOnce(
     output,
     /<script\b(?=[^>]*\bsrc=["']assets\/app\.js["'])[^>]*>\s*<\/script>/i,
-    `<script id="playbook-data" type="application/json">${embeddedData}</script>\n<script>${appText}</script>`,
+    `<script id="playbook-data" type="application/json">${embeddedData}</script>\n<script id="event-catalog-data" type="application/json">${embeddedEventCatalog}</script>\n<script id="attack-analytics-data" type="application/json">${embeddedAttackAnalytics}</script>\n<script>${appText}</script>`,
     "application script"
   );
   output = replaceExactlyOnce(
@@ -108,26 +180,44 @@ export function renderStandalone({ html, css, core, app, data }) {
     '<noscript><div class="noscript">JavaScript is required to browse the embedded playbook library.</div></noscript>'
   );
 
-  if (/\b(?:src|href)=["'](?:assets\/|data\/|manifest\.webmanifest|README\.md|service-worker\.js)/i.test(output)) {
+  const markupOnly = output
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
+  const unresolvedMarkupUrl = [...markupOnly.matchAll(/<[a-z][^>]*>/gi)]
+    .flatMap(match => [attributeValue(match[0], "src"), attributeValue(match[0], "href")])
+    .filter(value => value != null)
+    .find(value => value && !/^(?:data:|#)/i.test(value));
+  if (unresolvedMarkupUrl) {
     throw new Error("Standalone output still contains a required local-runtime reference.");
+  }
+  const unresolvedStyleUrl = [...styleText.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)]
+    .map(match => match[2].trim())
+    .find(value => value && !/^(?:data:|#)/i.test(value));
+  if (unresolvedStyleUrl) {
+    throw new Error("Standalone output still contains a local-runtime stylesheet reference.");
   }
   if (!output.includes("__ATTACK_PLAYBOOK_STANDALONE__ = true")) {
     throw new Error("Standalone service-worker guard is missing.");
   }
+  assertCspCompleteness(output, scriptHashes, styleHashes);
 
   return `${output.trimEnd()}\n`;
 }
 
 export async function buildStandalone({ check = false } = {}) {
-  const [html, css, core, app, data] = await Promise.all([
-    read("index.html"),
-    read("assets/style.css"),
-    read("assets/core.js"),
-    read("assets/app.js"),
-    read("data/playbooks.json")
-  ]);
-  const standalone = renderStandalone({ html, css, core, app, data });
+  const entries = await Promise.all(RUNTIME_REVISION_PATHS.map(async path => [path, await read(path)]));
+  const files = Object.fromEntries(entries);
+  const html = files["index.html"];
+  const css = files["assets/style.css"];
+  const core = files["assets/core.js"];
+  const app = files["assets/app.js"];
+  const data = files["data/playbooks.json"];
+  const eventCatalog = files["data/event-catalog.json"];
+  const attackAnalytics = files["data/attack-analytics.json"];
+  const standalone = renderStandalone({ html, css, core, app, data, eventCatalog, attackAnalytics });
+  const revision = `${JSON.stringify({ revision: computeRuntimeRevision(files) }, null, 2)}\n`;
   const target = new URL("standalone.html", root);
+  const revisionTarget = new URL("data/revision.json", root);
 
   if (check) {
     let current = "";
@@ -135,12 +225,20 @@ export async function buildStandalone({ check = false } = {}) {
     if (current !== standalone) {
       throw new Error("standalone.html is stale. Run `npm run build` and commit the result.");
     }
+    let currentRevision = "";
+    try { currentRevision = await read("data/revision.json"); } catch { /* reported as drift below */ }
+    if (currentRevision !== revision) {
+      throw new Error("data/revision.json is stale. Run `npm run build` and commit the result.");
+    }
     console.log(`Verified standalone.html (${Buffer.byteLength(standalone).toLocaleString()} bytes).`);
     return standalone;
   }
 
-  await writeFile(target, standalone, "utf8");
-  console.log(`Built standalone.html (${Buffer.byteLength(standalone).toLocaleString()} bytes).`);
+  await Promise.all([
+    writeFile(target, standalone, "utf8"),
+    writeFile(revisionTarget, revision, "utf8")
+  ]);
+  console.log(`Built standalone.html (${Buffer.byteLength(standalone).toLocaleString()} bytes) and data/revision.json.`);
   return standalone;
 }
 

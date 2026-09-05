@@ -20,5 +20,8 @@
     "npm": ">=10"
   },
   "packageManager": "npm@10.9.2",
+  "devDependencies": {
+    "ajv": "8.20.0"
+  },
   "license": "MIT"
 }

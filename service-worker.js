@@ -1,13 +1,27 @@
 "use strict";
 
-const APP_VERSION = "4.0.0";
 const CACHE_PREFIX = "tactic-atlas-";
-const LEGACY_CACHE_PREFIXES = ["attack-playbook-console-"];
-const SHELL_CACHE = `${CACHE_PREFIX}${APP_VERSION}-shell`;
-const DATA_CACHE = `${CACHE_PREFIX}${APP_VERSION}-data`;
+const SCOPED_CACHE_PREFIX = `${CACHE_PREFIX}scope-`;
+const LEGACY_CACHE_PREFIXES = [CACHE_PREFIX, "attack-playbook-console-"];
 const SCOPE_URL = new URL("./", self.registration.scope);
+const SCRIPT_URL = new URL(self.location?.href || SCOPE_URL.href);
+// CacheStorage is shared by every service-worker scope on an origin. Include the encoded
+// scope path so separate TacticAtlas deployments cannot overwrite or delete each other's
+// offline data.
+const CACHE_SCOPE = encodeURIComponent(SCOPE_URL.pathname || "/");
+const CACHE_NAMESPACE = `${SCOPED_CACHE_PREFIX}${CACHE_SCOPE}-`;
+const CACHE_REVISION = (SCRIPT_URL.searchParams.get("rev") || "release-4.5.0").replace(/[^a-z0-9._-]/gi, "-").slice(0, 100);
+const SHELL_CACHE = `${CACHE_NAMESPACE}${CACHE_REVISION}-shell`;
+const DATA_CACHE = `${CACHE_NAMESPACE}${CACHE_REVISION}-data`;
 const INDEX_URL = new URL("index.html", SCOPE_URL).href;
 const DATA_URL = new URL("data/playbooks.json", SCOPE_URL).href;
+const DATA_URLS = [
+  "data/playbooks.json",
+  "data/event-catalog.json",
+  "data/attack-analytics.json",
+  "data/revision.json"
+].map(path => new URL(path, SCOPE_URL).href);
+const DATA_SET = new Set(DATA_URLS);
 const SHELL_URLS = [
   "index.html",
   "assets/style.css",
@@ -17,6 +31,7 @@ const SHELL_URLS = [
   "manifest.webmanifest"
 ].map(path => new URL(path, SCOPE_URL).href);
 const SHELL_SET = new Set(SHELL_URLS);
+const OWNED_URLS = new Set([...SHELL_URLS, ...DATA_URLS]);
 
 function isSuccessful(response) {
   return Boolean(response?.ok && response.type !== "opaque");
@@ -30,13 +45,30 @@ async function fetchRequired(url) {
 
 async function putSuccessful(cacheName, key, response) {
   if (!isSuccessful(response)) return;
+  // Clone before the first await. The response is also returned to the page and may start being
+  // consumed while CacheStorage opens; cloning after that point can throw "body already used".
+  const copy = response.clone();
   const cache = await caches.open(cacheName);
-  await cache.put(key, response.clone());
+  await cache.put(key, copy);
 }
 
 async function cachedResponse(cacheName, key) {
   const cache = await caches.open(cacheName);
   return cache.match(key);
+}
+
+function isUnscopedLegacyCache(cacheName) {
+  return !cacheName.startsWith(SCOPED_CACHE_PREFIX)
+    && LEGACY_CACHE_PREFIXES.some(prefix => cacheName.startsWith(prefix));
+}
+
+async function removeOwnedLegacyEntries(cacheName) {
+  const cache = await caches.open(cacheName);
+  const requests = await cache.keys();
+  const owned = requests.filter(request => OWNED_URLS.has(request.url));
+  if (!owned.length) return;
+  await Promise.all(owned.map(request => cache.delete(request)));
+  if (!(await cache.keys()).length) await caches.delete(cacheName);
 }
 
 function offlineResponse(message, type = "text/plain") {
@@ -55,7 +87,7 @@ self.addEventListener("install", event => {
       await cache.put(url, response);
     }
     const dataCache = await caches.open(DATA_CACHE);
-    await dataCache.put(DATA_URL, await fetchRequired(DATA_URL));
+    for (const url of DATA_URLS) await dataCache.put(url, await fetchRequired(url));
   })());
 });
 
@@ -63,12 +95,15 @@ self.addEventListener("activate", event => {
   event.waitUntil((async () => {
     const current = new Set([SHELL_CACHE, DATA_CACHE]);
     const keys = await caches.keys();
-    await Promise.all(keys
-      .filter(key => [CACHE_PREFIX, ...LEGACY_CACHE_PREFIXES].some(prefix => key.startsWith(prefix)) && !current.has(key))
-      .map(key => caches.delete(key)));
+    await Promise.all([
+      ...keys
+        .filter(key => key.startsWith(CACHE_NAMESPACE) && !current.has(key))
+        .map(key => caches.delete(key)),
+      ...keys.filter(isUnscopedLegacyCache).map(removeOwnedLegacyEntries)
+    ]);
     await self.clients.claim();
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    clients.forEach(client => client.postMessage({ type: "PLAYBOOK_SW_ACTIVATED", version: APP_VERSION }));
+    clients.forEach(client => client.postMessage({ type: "PLAYBOOK_SW_ACTIVATED", revision: CACHE_REVISION }));
   })());
 });
 
@@ -78,44 +113,44 @@ self.addEventListener("message", event => {
     return;
   }
   if (event.data?.type === "GET_VERSION") {
-    event.source?.postMessage({ type: "PLAYBOOK_SW_VERSION", version: APP_VERSION });
+    event.source?.postMessage({ type: "PLAYBOOK_SW_VERSION", revision: CACHE_REVISION });
   }
 });
 
-async function handleNavigation(request) {
+function cacheNetworkResponse(event, networkResponse, cacheName, key) {
+  const update = networkResponse
+    .then(response => putSuccessful(cacheName, key, response))
+    .catch(() => {});
+  if (typeof event.waitUntil === "function") event.waitUntil(update);
+}
+
+async function handleNavigation(networkResponse) {
   try {
-    const response = await fetch(request);
-    if (isSuccessful(response)) {
-      await putSuccessful(SHELL_CACHE, INDEX_URL, response);
-      return response;
-    }
+    const response = await networkResponse;
+    if (isSuccessful(response)) return response;
     return (await cachedResponse(SHELL_CACHE, INDEX_URL)) || response;
   } catch {
     return (await cachedResponse(SHELL_CACHE, INDEX_URL)) || offlineResponse("The playbook console is unavailable offline.", "text/html");
   }
 }
 
-async function handleData(request) {
+async function handleData(networkResponse, url) {
   try {
-    const response = await fetch(request);
-    if (isSuccessful(response)) {
-      await putSuccessful(DATA_CACHE, DATA_URL, response);
-      return response;
-    }
-    return (await cachedResponse(DATA_CACHE, DATA_URL)) || response;
+    const response = await networkResponse;
+    if (isSuccessful(response)) return response;
+    return (await cachedResponse(DATA_CACHE, url)) || response;
   } catch {
-    return (await cachedResponse(DATA_CACHE, DATA_URL)) || offlineResponse('{"error":"Playbook data is unavailable offline."}', "application/json");
+    return (await cachedResponse(DATA_CACHE, url)) || offlineResponse('{"error":"Application data is unavailable offline."}', "application/json");
   }
 }
 
-async function handleShell(request) {
+async function handleShell(networkResponse, url) {
   try {
-    const response = await fetch(request);
-    if (isSuccessful(response)) await putSuccessful(SHELL_CACHE, request.url, response);
+    const response = await networkResponse;
     if (isSuccessful(response)) return response;
-    return (await cachedResponse(SHELL_CACHE, request.url)) || response;
+    return (await cachedResponse(SHELL_CACHE, url)) || response;
   } catch {
-    return (await cachedResponse(SHELL_CACHE, request.url)) || offlineResponse("Application resource unavailable offline.");
+    return (await cachedResponse(SHELL_CACHE, url)) || offlineResponse("Application resource unavailable offline.");
   }
 }
 
@@ -130,10 +165,16 @@ self.addEventListener("fetch", event => {
     && (url.pathname === SCOPE_URL.pathname || url.pathname === new URL("index.html", SCOPE_URL).pathname);
 
   if (isAppNavigation) {
-    event.respondWith(handleNavigation(request));
-  } else if (url.href === DATA_URL) {
-    event.respondWith(handleData(request));
+    const networkResponse = fetch(request);
+    cacheNetworkResponse(event, networkResponse, SHELL_CACHE, INDEX_URL);
+    event.respondWith(handleNavigation(networkResponse));
+  } else if (DATA_SET.has(url.href)) {
+    const networkResponse = fetch(request);
+    cacheNetworkResponse(event, networkResponse, DATA_CACHE, url.href);
+    event.respondWith(handleData(networkResponse, url.href));
   } else if (SHELL_SET.has(url.href)) {
-    event.respondWith(handleShell(request));
+    const networkResponse = fetch(request);
+    cacheNetworkResponse(event, networkResponse, SHELL_CACHE, url.href);
+    event.respondWith(handleShell(networkResponse, url.href));
   }
 });

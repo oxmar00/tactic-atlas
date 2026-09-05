@@ -5,13 +5,19 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
-const TODAY = "2026-07-12";
+const TODAY = new Date().toISOString().slice(0, 10);
 const SCHEMA_VERSION = "4.0.0";
 const CURRENT_TACTICS = [
   "Reconnaissance", "Resource Development", "Initial Access", "Execution", "Persistence",
   "Privilege Escalation", "Stealth", "Defense Impairment", "Credential Access", "Discovery",
   "Lateral Movement", "Collection", "Command and Control", "Exfiltration", "Impact"
 ];
+
+function addDays(isoDate, days) {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 const NAME_UPDATES = new Map([
   ["T1176", "Software Extensions"],
@@ -555,7 +561,16 @@ function migratePlaybook(legacy, index) {
   const { tactics, mappings } = currentTactics(working);
   working.tactics = tactics;
   const tactic = working.kind === "technique" ? (tactics[0] || "Stealth") : working.kind === "platform" ? "Platform" : "Operational";
-  const sections = parseSections(legacy.html || "");
+  const parsedSections = parseSections(legacy.html || "");
+  const sections = parsedSections.length ? parsedSections : [{
+    id: "1-overview",
+    title: "Overview",
+    order: 1,
+    blocks: [{
+      type: "paragraph",
+      text: clean(legacy.html || "") || `Operational detection and incident-response guidance for ${name}.`
+    }]
+  }];
   const telemetry = telemetryFor(working, sections, tactic);
   working.platforms = inferPlatforms(working, sections, telemetry);
   const detectionSourceValue = detectionSource(sections);
@@ -600,6 +615,7 @@ function migratePlaybook(legacy, index) {
     tactic_mappings: mappings,
     techniques: working.kind === "technique" ? [{ id: working.id, name, relationship: "primary", url: `https://attack.mitre.org/techniques/${working.id}/`, provenance: deprecated ? "legacy-deprecated" : "attack-v19.1-migration" }] : [],
     subtechniques: parseSubtechniques(legacy.subtechniques),
+    threat_groups: [],
     platforms: working.platforms,
     data_sources: telemetry.map(item => item.id),
     data_source_summary: telemetry.map(item => `${item.priority}: ${item.source_name}`).join("; "),
@@ -614,7 +630,7 @@ function migratePlaybook(legacy, index) {
       owner: "SOC Detection Engineering owns the analytic; Incident Response owns confirmed incidents; telemetry source owners maintain collection health.",
       review_frequency: ["critical", "high"].includes(severity) ? "Every 90 days and after ATT&CK, source, parser, platform, or material incident changes" : "Every 180 days and after ATT&CK, source, parser, platform, or material incident changes",
       last_reviewed: TODAY,
-      next_review: ["critical", "high"].includes(severity) ? "2026-10-10" : "2027-01-08",
+      next_review: addDays(TODAY, ["critical", "high"].includes(severity) ? 90 : 180),
       last_validation_date: null,
       data_source_dependencies: telemetry.map(item => item.id),
       known_gaps: gaps,
@@ -695,32 +711,10 @@ function coverageCsv(data) {
   return [headers, ...rows].map(row => row.map(escCsv).join(",")).join("\r\n") + "\r\n";
 }
 
-function schemaDocument() {
-  return {
-    $schema: "https://json-schema.org/draft/2020-12/schema",
-    $id: "https://example.invalid/tactic-atlas/playbooks.schema.json",
-    title: "TacticAtlas v4 dataset",
-    type: "object",
-    required: ["meta", "playbooks"],
-    properties: {
-      meta: { type: "object", required: ["schema_version", "content_version", "generated", "counts", "tactic_order", "attack", "quality_model"] },
-      playbooks: { type: "array", minItems: 1, items: { $ref: "#/$defs/playbook" } }
-    },
-    additionalProperties: false,
-    $defs: {
-      playbook: {
-        type: "object",
-        required: ["schema_version", "id", "name", "kind", "description", "tactics", "tactic_mappings", "techniques", "subtechniques", "platforms", "data_source_summary", "telemetry_requirements", "detection", "queries", "validation", "response", "lifecycle", "tags", "severity", "confidence", "maturity", "status", "quality_score", "quality_breakdown", "coverage", "content_sections", "search_terms"],
-        properties: {
-          schema_version: { const: SCHEMA_VERSION }, id: { type: "string" }, name: { type: "string" }, kind: { enum: ["technique", "operational", "platform"] }, description: { type: "string", minLength: 40 },
-          tactics: { type: "array", items: { type: "string" } }, tactic_mappings: { type: "array", items: { type: "object" } }, techniques: { type: "array" }, subtechniques: { type: "array" }, platforms: { type: "array", items: { type: "string" } },
-          telemetry_requirements: { type: "array", minItems: 1, items: { type: "object", required: ["id", "category", "tier", "priority", "event_types", "raw_fields", "normalized_fields"] } },
-          detection: { type: "object", required: ["objective", "hypothesis", "strategy", "strategies", "maturity_levels"] }, queries: { type: "array", minItems: 1 }, validation: { type: "object" }, response: { type: "object" }, lifecycle: { type: "object" },
-          severity: { enum: ["informational", "low", "medium", "high", "critical"] }, confidence: { enum: ["low", "medium", "high"] }, maturity: { type: "integer", minimum: 1, maximum: 4 }, status: { enum: ["draft", "testing", "pilot", "active", "production", "deprecated", "retired"] }, quality_score: { type: "number", minimum: 0, maximum: 100 }, quality_breakdown: { type: "object" }, coverage: { type: "object" }, content_sections: { type: "array", minItems: 1 }, search_terms: { type: "array", minItems: 3 }
-        }
-      }
-    }
-  };
+async function schemaDocument() {
+  // The checked-in schema is the canonical runtime contract. Copying it keeps the
+  // migrator from silently emitting a weaker, stale schema as the contract evolves.
+  return JSON.parse(await readFile(resolve(ROOT, "data/playbooks.schema.json"), "utf8"));
 }
 
 async function main() {
@@ -752,8 +746,10 @@ async function main() {
       },
       quality_model: { version: "1.0.0", weights: { attack_mapping: 8, telemetry_specificity: 18, detection_implementation: 15, query_coverage: 8, false_positive_tuning: 7, validation: 8, triage: 5, investigation: 9, containment: 8, recovery_closure: 6, references: 4, freshness: 4 }, note: "The generated score awards partial query, validation, and reference credit until product-specific execution evidence is supplied." },
       migration: { source_version: legacy.meta?.content_version || "3.0.0", source_sha256: sha(sourceText), source_playbooks: legacy.playbooks.length, structured_playbooks: playbooks.length, html_runtime_removed: true },
+      threat_groups_summary: { total_groups: 0, playbooks_with_groups: 0, total_playbook_group_mappings: 0, source: "Not populated during legacy migration; run add-threat-groups.mjs with an authoritative ATT&CK STIX snapshot.", source_url: "https://github.com/mitre-attack/attack-stix-data", attack_version: "19.1" },
       notices: ["Quality scores summarize documented coverage and do not replace analyst judgment.", "Example queries and inherited event identifiers require environment-specific validation before production use."]
     },
+    groups: [],
     playbooks
   };
   const report = qualityReport(data);
@@ -762,7 +758,7 @@ async function main() {
   await mkdir(reports, { recursive: true });
   // Keep the runtime payload compact. Human-readable audit artifacts remain pretty-printed.
   await writeFile(output, `${JSON.stringify(data)}\n`, "utf8");
-  await writeFile(resolve(dirname(output), "playbooks.schema.json"), `${JSON.stringify(schemaDocument(), null, 2)}\n`, "utf8");
+  await writeFile(resolve(dirname(output), "playbooks.schema.json"), `${JSON.stringify(await schemaDocument(), null, 2)}\n`, "utf8");
   await writeFile(resolve(reports, "content-quality.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
   await writeFile(resolve(reports, "content-quality.md"), reportMarkdown(report), "utf8");
   await writeFile(resolve(reports, "coverage.csv"), coverageCsv(data), "utf8");

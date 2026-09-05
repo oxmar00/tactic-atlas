@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { renderStandalone } from "./build-standalone.mjs";
+import Ajv2020 from "ajv/dist/2020.js";
+import { computeRuntimeRevision, renderStandalone } from "./build-standalone.mjs";
+import { applyTelemetryEnrichment } from "./enhance-telemetry.mjs";
 
 export const SCHEMA_VERSION = "4.0.0";
 export const TACTICS = Object.freeze([
@@ -21,7 +23,7 @@ const RESPONSE_PHASES = [
 ];
 const REQUIRED_PLAYBOOK_FIELDS = [
   "schema_version", "id", "name", "kind", "description", "tactics", "tactic_mappings",
-  "techniques", "subtechniques", "threat_groups", "platforms", "data_source_summary", "telemetry_requirements",
+  "techniques", "subtechniques", "threat_groups", "platforms", "data_sources", "data_source_summary", "telemetry_requirements",
   "detection", "queries", "validation", "response", "lifecycle", "tags", "severity", "confidence",
   "maturity", "status", "quality_score", "quality_breakdown", "coverage", "content_sections", "search_terms"
 ];
@@ -33,11 +35,29 @@ const ARRAY_TELEMETRY_FIELDS = [
 ];
 const PLACEHOLDER = /\b(?:todo|tbd|fixme|lorem ipsum|add content here|placeholder text|coming soon)\b/i;
 const DANGEROUS_MARKUP = /<(?:script|iframe|object|embed|base|form|meta)\b|<[^>]+\s(?:on[a-z]+|srcdoc|style)\s*=|(?:href|src)\s*=\s*["']?\s*(?:javascript|vbscript|data):/i;
+const EVENT_CODE_DECL = /Event(?:Code|ID)\s*=\s*([\d,\s]+)/gi;
 const root = new URL("../", import.meta.url);
 
 function plainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+}
+
+export function validateAgainstSchema(data, schema) {
+  try {
+    const ajv = new Ajv2020({ allErrors: true, strict: false, validateFormats: false });
+    const validate = ajv.compile(schema);
+    const valid = validate(data);
+    return {
+      valid: Boolean(valid),
+      errors: (validate.errors || []).map(error => {
+        const path = error.instancePath ? `data${error.instancePath.replaceAll("/", ".")}` : "data";
+        return `${path}: ${error.message || error.keyword}`;
+      })
+    };
+  } catch (error) {
+    return { valid: false, errors: [`schema: could not be compiled: ${error.message}`] };
+  }
 }
 
 function makeCollector(limit = 600) {
@@ -91,6 +111,14 @@ function substantive(value) {
   if (Array.isArray(value)) return value.length > 0 && value.some(substantive);
   if (plainObject(value)) return Object.keys(value).length > 0 && Object.values(value).some(substantive);
   return typeof value === "number" || typeof value === "boolean";
+}
+
+function eventCodesFromChannel(channel) {
+  const codes = [];
+  for (const match of String(channel || "").matchAll(EVENT_CODE_DECL)) {
+    codes.push(...(match[1].match(/\d{1,5}/g) || []));
+  }
+  return [...new Set(codes)];
 }
 
 function substantiveArray(value, path, add, { required = false, min = 0, max = 500 } = {}) {
@@ -198,7 +226,7 @@ function legacyTacticAllowed(playbook, tactic) {
       && legacyMappingAllowed(playbook, mapping));
 }
 
-function validateTelemetry(value, path, add) {
+function validateTelemetry(value, path, add, attackVersion) {
   if (!Array.isArray(value)) {
     add(path, "must be an array");
     return;
@@ -231,14 +259,22 @@ function validateTelemetry(value, path, add) {
         add(`${at}.${key}`, "must be a substantive string or object");
       }
     }
-    (source.event_ids || []).forEach((eventId, eventIndex) => {
+    const eventIds = Array.isArray(source.event_ids) ? source.event_ids : [];
+    eventIds.forEach((eventId, eventIndex) => {
       const eventAt = `${at}.event_ids[${eventIndex}]`;
       if (!plainObject(eventId)) { add(eventAt, "must be an object"); return; }
-      if ("provenance" in eventId && !/^(?:legacy-authored-unverified|attack-v[\d.]+-verified)$/.test(String(eventId.provenance ?? "").trim())) {
+      const provenance = String(eventId.provenance ?? "").trim();
+      if ("provenance" in eventId && !/^(?:legacy-authored-unverified|attack-v[\d.]+-verified)$/.test(provenance)) {
         add(`${eventAt}.provenance`, "must be 'legacy-authored-unverified' or 'attack-vX.Y-verified'");
+      } else if (provenance.startsWith("attack-v") && attackVersion && provenance !== `attack-v${attackVersion}-verified`) {
+        add(`${eventAt}.provenance`, `must match dataset ATT&CK version ${attackVersion}`);
       }
     });
-    (source.attack_analytics || []).forEach((analytic, analyticIndex) => {
+    if ("attack_analytics" in source && !Array.isArray(source.attack_analytics)) {
+      add(`${at}.attack_analytics`, "must be an array");
+    }
+    const attackAnalytics = Array.isArray(source.attack_analytics) ? source.attack_analytics : [];
+    attackAnalytics.forEach((analytic, analyticIndex) => {
       const analyticAt = `${at}.attack_analytics[${analyticIndex}]`;
       if (!plainObject(analytic)) { add(analyticAt, "must be an object"); return; }
       ["id", "detection_strategy", "name", "log_source", "channel"].forEach(field => {
@@ -249,6 +285,17 @@ function validateTelemetry(value, path, add) {
         if (url.protocol !== "https:" || url.hostname !== "attack.mitre.org") add(`${analyticAt}.url`, "must be an https://attack.mitre.org URL");
       } catch { add(`${analyticAt}.url`, "must be a valid URL"); }
     });
+    if ("attack_enrichment" in source) {
+      if (!plainObject(source.attack_enrichment)) {
+        add(`${at}.attack_enrichment`, "must be an object");
+      } else {
+        if (source.attack_enrichment.generated !== true) add(`${at}.attack_enrichment.generated`, "must be true");
+        stringValue(source.attack_enrichment.source, `${at}.attack_enrichment.source`, add, { min: 1, max: 200 });
+        if (source.attack_enrichment.attack_version !== attackVersion) {
+          add(`${at}.attack_enrichment.attack_version`, `must match dataset ATT&CK version ${attackVersion}`);
+        }
+      }
+    }
   });
 }
 
@@ -351,10 +398,41 @@ function validateContentSections(value, path, add) {
     stringValue(section.id, `${at}.id`, add, { max: 160 });
     stringValue(section.title, `${at}.title`, add, { max: 300 });
     if (!substantive(section)) add(at, "must contain substantive content");
+    if ("blocks" in section) {
+      if (!Array.isArray(section.blocks)) add(`${at}.blocks`, "must be an array");
+      else section.blocks.forEach((block, blockIndex) => {
+        if (!substantive(block)) add(`${at}.blocks[${blockIndex}]`, "must contain a substantive content block");
+      });
+    }
   });
 }
 
-function validatePlaybook(playbook, index, add, knownTactics) {
+function validateTelemetryDerivatives(playbook, path, add) {
+  const telemetry = Array.isArray(playbook.telemetry_requirements) ? playbook.telemetry_requirements : [];
+  const expectedSources = telemetry.map(entry => typeof entry?.id === "string" ? entry.id.trim() : "").filter(Boolean);
+  const dataSources = stringArray(playbook.data_sources, `${path}.data_sources`, add, { max: 500 });
+  if (JSON.stringify(dataSources) !== JSON.stringify(expectedSources)) {
+    add(`${path}.data_sources`, "must exactly mirror telemetry_requirements IDs in order");
+  }
+  const expectedSummary = telemetry.map(entry => {
+    const tier = String(entry?.tier || entry?.priority || "unspecified").trim().toLowerCase();
+    const source = String(entry?.source_name || entry?.source_heading || entry?.category || entry?.id || "unspecified telemetry").trim();
+    return `${tier}: ${source}`;
+  }).join("; ");
+  if (playbook.data_source_summary !== expectedSummary) {
+    add(`${path}.data_source_summary`, "must summarize the reconciled telemetry requirements");
+  }
+  if (plainObject(playbook.coverage)) {
+    for (const tier of ["required", "recommended", "optional", "compensating"]) {
+      const expected = telemetry.filter(entry => String(entry?.tier || "").toLowerCase() === tier).length;
+      if (playbook.coverage[`${tier}_telemetry`] !== expected) {
+        add(`${path}.coverage.${tier}_telemetry`, `is ${playbook.coverage[`${tier}_telemetry`]}, expected ${expected}`);
+      }
+    }
+  }
+}
+
+function validatePlaybook(playbook, index, add, knownTactics, attackVersion) {
   const path = `data.playbooks[${index}]`;
   if (!plainObject(playbook)) {
     add(path, "must be an object");
@@ -386,7 +464,8 @@ function validatePlaybook(playbook, index, add, knownTactics) {
   });
   stringArray(playbook.platforms, `${path}.platforms`, add, { max: 100 });
   stringValue(playbook.data_source_summary, `${path}.data_source_summary`, add, { min: 20, max: 5_000 });
-  validateTelemetry(playbook.telemetry_requirements, `${path}.telemetry_requirements`, add);
+  validateTelemetry(playbook.telemetry_requirements, `${path}.telemetry_requirements`, add, attackVersion);
+  validateTelemetryDerivatives(playbook, path, add);
   validateDetection(playbook.detection, `${path}.detection`, add);
   validateQueries(playbook.queries, `${path}.queries`, add);
   if (!plainObject(playbook.validation) || !substantive(playbook.validation)) add(`${path}.validation`, "must be a substantive object");
@@ -395,15 +474,14 @@ function validatePlaybook(playbook, index, add, knownTactics) {
   stringArray(playbook.tags, `${path}.tags`, add, { min: 1, max: 100 });
   stringValue(playbook.severity, `${path}.severity`, add, { allowed: SEVERITIES, max: 20 });
   stringValue(playbook.confidence, `${path}.confidence`, add, { allowed: CONFIDENCE, max: 20 });
-  if (!(Number.isInteger(playbook.maturity) && playbook.maturity >= 1 && playbook.maturity <= 4)
-      && !(typeof playbook.maturity === "string" && /^(?:1|2|3|4|level [1-4]|basic|correlated|contextual|advanced)$/i.test(playbook.maturity.trim()))) {
+  if (!(Number.isInteger(playbook.maturity) && playbook.maturity >= 1 && playbook.maturity <= 4)) {
     add(`${path}.maturity`, "must identify maturity level 1 through 4");
   }
   stringValue(playbook.status, `${path}.status`, add, { allowed: STATUSES, max: 20 });
   validateScores(playbook, path, add);
   validateContentSections(playbook.content_sections, `${path}.content_sections`, add);
   const searchTerms = stringArray(playbook.search_terms, `${path}.search_terms`, add, { min: 3, max: 2_000 });
-  if (id && !searchTerms.some(term => term.toLowerCase() === id.toLowerCase())) {
+  if (id && !searchTerms.some(term => typeof term === "string" && term.toLowerCase() === id.toLowerCase())) {
     add(`${path}.search_terms`, "must include the playbook ID");
   }
   if (playbook.url != null && playbook.url !== "") {
@@ -432,10 +510,24 @@ export function validateDataset(data) {
   inspectJsonSafety(data, "data", add);
   if (!plainObject(data.meta)) add("data.meta", "must be an object");
   const meta = plainObject(data.meta) ? data.meta : {};
+  ["schema_version", "content_version", "generated", "counts", "tactic_order", "attack", "quality_model"].forEach(field => {
+    if (!Object.hasOwn(meta, field)) add(`data.meta.${field}`, "is required by schema v4.0.0");
+  });
   stringValue(meta.schema_version, "data.meta.schema_version", add, { allowed: new Set([SCHEMA_VERSION]) });
   stringValue(meta.content_version, "data.meta.content_version", add, { allowed: new Set([SCHEMA_VERSION]) });
-  const generated = stringValue(meta.generated ?? meta.last_updated, "data.meta.generated", add, { pattern: /^\d{4}-\d{2}-\d{2}$/ });
+  const generated = stringValue(meta.generated, "data.meta.generated", add, { pattern: /^\d{4}-\d{2}-\d{2}$/ });
   if (generated && Number.isNaN(Date.parse(`${generated}T00:00:00Z`))) add("data.meta.generated", "must be a valid calendar date");
+  if (!plainObject(meta.attack) || !substantive(meta.attack)) add("data.meta.attack", "must be a substantive object");
+  if (!plainObject(meta.quality_model) || !substantive(meta.quality_model)) add("data.meta.quality_model", "must be a substantive object");
+  const attackVersion = plainObject(meta.attack)
+    ? stringValue(meta.attack.version, "data.meta.attack.version", add, { pattern: /^\d+(?:\.\d+){0,2}$/ })
+    : "";
+  if (plainObject(meta.telemetry_enrichment_summary) && meta.telemetry_enrichment_summary.attack_version !== attackVersion) {
+    add("data.meta.telemetry_enrichment_summary.attack_version", `must match dataset ATT&CK version ${attackVersion}`);
+  }
+  if (plainObject(meta.threat_groups_summary) && meta.threat_groups_summary.attack_version !== attackVersion) {
+    add("data.meta.threat_groups_summary.attack_version", `must match dataset ATT&CK version ${attackVersion}`);
+  }
   const tacticOrder = stringArray(meta.tactic_order, "data.meta.tactic_order", add, { min: TACTICS.length, max: TACTICS.length });
   TACTICS.forEach(tactic => {
     if (!tacticOrder.includes(tactic)) add("data.meta.tactic_order", `missing Enterprise tactic ${tactic}`);
@@ -451,7 +543,7 @@ export function validateDataset(data) {
   const ids = new Set();
   const descriptions = new Map();
   data.playbooks.forEach((playbook, index) => {
-    const summary = validatePlaybook(playbook, index, add, knownTactics);
+    const summary = validatePlaybook(playbook, index, add, knownTactics, attackVersion);
     if (!summary) return;
     if (ids.has(summary.id)) add(`data.playbooks[${index}].id`, `duplicate ID ${summary.id}`);
     ids.add(summary.id);
@@ -492,6 +584,21 @@ export function validateDataset(data) {
   referencedGroupIds.forEach(groupId => {
     if (!knownGroupIds.has(groupId)) add("data.groups", `is missing referenced group ${groupId}`);
   });
+  if (plainObject(meta.threat_groups_summary)) {
+    const expectedThreatGroupSummary = {
+      total_groups: Array.isArray(data.groups) ? data.groups.length : 0,
+      playbooks_with_groups: data.playbooks.filter(playbook =>
+        Array.isArray(playbook?.threat_groups) && playbook.threat_groups.length > 0
+      ).length,
+      total_playbook_group_mappings: data.playbooks.reduce((total, playbook) =>
+        total + (Array.isArray(playbook?.threat_groups) ? playbook.threat_groups.length : 0), 0)
+    };
+    Object.entries(expectedThreatGroupSummary).forEach(([key, expected]) => {
+      if (meta.threat_groups_summary[key] !== expected) {
+        add(`data.meta.threat_groups_summary.${key}`, `is ${meta.threat_groups_summary[key]}, expected ${expected}`);
+      }
+    });
+  }
 
   return { errors: collector.finish(), stats };
 }
@@ -516,13 +623,130 @@ function validateManifest(manifest, add) {
   }
 }
 
+export function validateEventCatalog(catalog) {
+  const collector = makeCollector();
+  const add = collector.add.bind(collector);
+  if (!plainObject(catalog)) {
+    add("event_catalog", "root must be an object");
+    return collector.finish();
+  }
+  inspectJsonSafety(catalog, "event_catalog", add);
+  stringValue(catalog.schema_version, "event_catalog.schema_version", add, { allowed: new Set(["1.0.0"]) });
+  stringValue(catalog.description, "event_catalog.description", add, { min: 20 });
+  if (!plainObject(catalog.provenance) || !Object.keys(catalog.provenance).length) {
+    add("event_catalog.provenance", "must be a non-empty object");
+  } else {
+    Object.entries(catalog.provenance).forEach(([key, value]) => {
+      stringValue(key, `event_catalog.provenance.${key}`, add, { max: 100 });
+      stringValue(value, `event_catalog.provenance.${key}`, add, { min: 5, max: 500 });
+    });
+  }
+  if (!Array.isArray(catalog.events) || !catalog.events.length) {
+    add("event_catalog.events", "must contain at least one event definition");
+    return collector.finish();
+  }
+  const seen = new Set();
+  catalog.events.forEach((event, index) => {
+    const at = `event_catalog.events[${index}]`;
+    if (!plainObject(event)) { add(at, "must be an object"); return; }
+    const eventId = stringValue(event.event_id, `${at}.event_id`, add, { pattern: /^[A-Za-z0-9._:-]{1,80}$/ });
+    const logSource = stringValue(event.log_source, `${at}.log_source`, add, { max: 160 });
+    stringValue(event.name, `${at}.name`, add, { max: 300 });
+    const source = stringValue(event.source, `${at}.source`, add, { max: 100 });
+    if (source && plainObject(catalog.provenance) && !Object.hasOwn(catalog.provenance, source)) {
+      add(`${at}.source`, `does not resolve to provenance entry ${source}`);
+    }
+    for (const field of ["use_for", "fields", "investigation"]) {
+      stringArray(event[field], `${at}.${field}`, add, { min: 1, max: 200 });
+    }
+    if (event.conditional != null) stringValue(event.conditional, `${at}.conditional`, add, { max: 2_000 });
+    const key = `${logSource.toLowerCase()}|${eventId.toLowerCase()}`;
+    if (eventId && logSource && seen.has(key)) add(at, "duplicates an earlier log-source/event-ID pair");
+    seen.add(key);
+  });
+  return collector.finish();
+}
+
+export function validateAttackAnalytics(analytics, expectedAttackVersion = "") {
+  const collector = makeCollector();
+  const add = collector.add.bind(collector);
+  if (!plainObject(analytics)) {
+    add("attack_analytics", "root must be an object");
+    return collector.finish();
+  }
+  inspectJsonSafety(analytics, "attack_analytics", add);
+  stringValue(analytics.schema_version, "attack_analytics.schema_version", add, { allowed: new Set(["1.0.0"]) });
+  const attackVersion = stringValue(analytics.attack_version, "attack_analytics.attack_version", add, { pattern: /^\d+(?:\.\d+){0,2}$/ });
+  if (expectedAttackVersion && attackVersion && attackVersion !== expectedAttackVersion) {
+    add("attack_analytics.attack_version", `must match playbook dataset ATT&CK version ${expectedAttackVersion}`);
+  }
+  stringValue(analytics.generated_from, "attack_analytics.generated_from", add, { min: 5, max: 500 });
+  try {
+    const source = new URL(analytics.source_url);
+    if (source.protocol !== "https:") add("attack_analytics.source_url", "must use HTTPS");
+  } catch { add("attack_analytics.source_url", "must be a valid URL"); }
+  if (!plainObject(analytics.techniques)) {
+    add("attack_analytics.techniques", "must be an object keyed by ATT&CK technique ID");
+    return collector.finish();
+  }
+  const stats = { techniques: 0, with_telemetry: 0, log_source_refs: 0, event_id_refs: 0, platform_mismatched_refs: 0 };
+  Object.entries(analytics.techniques).forEach(([techniqueId, technique]) => {
+    const at = `attack_analytics.techniques.${techniqueId}`;
+    stats.techniques++;
+    if (!/^T\d{4}(?:\.\d{3})?$/.test(techniqueId)) add(at, "key must be an ATT&CK technique ID");
+    if (!plainObject(technique)) { add(at, "must be an object"); return; }
+    const id = stringValue(technique.id, `${at}.id`, add, { pattern: /^T\d{4}(?:\.\d{3})?$/ });
+    if (id && id !== techniqueId) add(`${at}.id`, `must match key ${techniqueId}`);
+    stringValue(technique.name, `${at}.name`, add, { max: 300 });
+    if (typeof technique.is_subtechnique !== "boolean") add(`${at}.is_subtechnique`, "must be a boolean");
+    if (!(technique.parent === null || typeof technique.parent === "string")) add(`${at}.parent`, "must be a string or null");
+    stringArray(technique.tactics, `${at}.tactics`, add, { max: 20 });
+    stringArray(technique.platforms, `${at}.platforms`, add, { max: 100 });
+    if (!Array.isArray(technique.telemetry)) {
+      add(`${at}.telemetry`, "must be an array");
+    } else {
+      if (technique.telemetry.length) stats.with_telemetry++;
+      technique.telemetry.forEach((source, sourceIndex) => {
+        const sourceAt = `${at}.telemetry[${sourceIndex}]`;
+        stats.log_source_refs++;
+        if (!plainObject(source)) { add(sourceAt, "must be an object"); return; }
+        stringValue(source.log_source, `${sourceAt}.log_source`, add, { max: 300 });
+        stringValue(source.channel, `${sourceAt}.channel`, add, { max: 2_000 });
+        const eventIds = stringArray(source.event_ids, `${sourceAt}.event_ids`, add, { max: 200 });
+        stats.event_id_refs += Array.isArray(eventIds) ? eventIds.length : 0;
+        const declaredCodes = Array.isArray(eventIds) ? eventIds.filter(value => typeof value === "string") : [];
+        const channelCodes = eventCodesFromChannel(source.channel);
+        if (JSON.stringify([...new Set(declaredCodes)].sort()) !== JSON.stringify(channelCodes.sort())) {
+          add(`${sourceAt}.event_ids`, "must exactly match every EventCode/EventID declared by channel");
+        }
+        if (typeof source.platform_mismatch !== "boolean") add(`${sourceAt}.platform_mismatch`, "must be a boolean");
+        else if (source.platform_mismatch) stats.platform_mismatched_refs++;
+        stringArray(source.platforms, `${sourceAt}.platforms`, add, { max: 100 });
+        for (const field of ["analytic", "strategy", "strategy_name"]) stringValue(source[field], `${sourceAt}.${field}`, add, { max: 300 });
+        try {
+          const url = new URL(source.strategy_url);
+          if (url.protocol !== "https:" || url.hostname !== "attack.mitre.org") add(`${sourceAt}.strategy_url`, "must be an ATT&CK HTTPS URL");
+        } catch { add(`${sourceAt}.strategy_url`, "must be a valid URL"); }
+      });
+    }
+    substantiveArray(technique.tuning, `${at}.tuning`, add, { required: true, max: 100 });
+    substantiveArray(technique.pivots, `${at}.pivots`, add, { required: true, max: 100 });
+  });
+  if (!plainObject(analytics.counts)) add("attack_analytics.counts", "must be an object");
+  else Object.entries(stats).forEach(([key, expected]) => {
+    if (analytics.counts[key] !== expected) add(`attack_analytics.counts.${key}`, `is ${analytics.counts[key]}, expected ${expected}`);
+  });
+  return collector.finish();
+}
+
 function assertSyntax(source, path, add) {
   try { new Function(source); } catch (error) { add(path, `JavaScript syntax error: ${error.message}`); }
 }
 
 async function readProjectFiles(add) {
   const paths = [
-    "data/playbooks.json", "data/playbooks.schema.json", "index.html", "assets/core.js", "assets/app.js", "assets/style.css",
+    "data/playbooks.json", "data/playbooks.schema.json", "data/event-catalog.json", "data/attack-analytics.json", "data/revision.json",
+    "index.html", "assets/core.js", "assets/app.js", "assets/style.css",
     "assets/icon.svg", "manifest.webmanifest", "service-worker.js", "standalone.html"
   ];
   const entries = await Promise.all(paths.map(async path => {
@@ -541,6 +765,44 @@ export async function validateProject() {
   catch (error) { add("data/playbooks.json", `invalid JSON: ${error.message}`); }
   const dataset = data ? validateDataset(data) : { errors: [], stats: { total: 0 } };
   dataset.errors.forEach(error => add("dataset", error));
+
+  let eventCatalog;
+  try { eventCatalog = JSON.parse(files["data/event-catalog.json"]); }
+  catch (error) { add("data/event-catalog.json", `invalid JSON: ${error.message}`); }
+  if (eventCatalog) validateEventCatalog(eventCatalog).forEach(error => add("data/event-catalog.json", error));
+
+  let attackAnalytics;
+  try { attackAnalytics = JSON.parse(files["data/attack-analytics.json"]); }
+  catch (error) { add("data/attack-analytics.json", `invalid JSON: ${error.message}`); }
+  const attackAnalyticsErrors = attackAnalytics
+    ? validateAttackAnalytics(attackAnalytics, data?.meta?.attack?.version)
+    : [];
+  attackAnalyticsErrors.forEach(error => add("data/attack-analytics.json", error));
+  if (data && dataset.errors.length === 0 && attackAnalytics && attackAnalyticsErrors.length === 0) {
+    try {
+      const synchronized = structuredClone(data);
+      const drift = applyTelemetryEnrichment(synchronized, attackAnalytics, { generatedDate: data.meta.generated });
+      const changed = [
+        "playbooksChanged", "entriesCreated", "entriesRemoved", "eventIdsAdded", "eventIdsUpgraded",
+        "eventIdsRemoved", "eventIdsRefreshed", "attackAnalyticsAdded", "attackAnalyticsRemoved"
+      ].some(key => drift[key] > 0);
+      if (changed) add("data/playbooks.json", "ATT&CK telemetry enrichment is stale; run npm run enhance-telemetry -- --analytics data/attack-analytics.json");
+    } catch (error) {
+      add("data/playbooks.json", `cannot reconcile ATT&CK analytics: ${error.message}`);
+    }
+  }
+
+  let revision;
+  try { revision = JSON.parse(files["data/revision.json"]); }
+  catch (error) { add("data/revision.json", `invalid JSON: ${error.message}`); }
+  if (!plainObject(revision) || !/^sha256-[a-f0-9]{64}$/.test(String(revision?.revision || ""))) {
+    add("data/revision.json", "must contain a full SHA-256 runtime revision");
+  } else {
+    try {
+      const expectedRevision = computeRuntimeRevision(files);
+      if (revision.revision !== expectedRevision) add("data/revision.json", "is stale; run npm run build");
+    } catch (error) { add("data/revision.json", error.message); }
+  }
 
   let manifest;
   try { manifest = JSON.parse(files["manifest.webmanifest"]); }
@@ -565,6 +827,10 @@ export async function validateProject() {
     else REQUIRED_PLAYBOOK_FIELDS.forEach(field => {
       if (!requiredArrays.some(required => required.includes(field))) add("data/playbooks.schema.json", `playbook schema does not require ${field}`);
     });
+    if (data) {
+      const result = validateAgainstSchema(data, schema);
+      result.errors.forEach(error => add("data/playbooks.schema.json", error));
+    }
   }
 
   const index = files["index.html"];
@@ -574,7 +840,8 @@ export async function validateProject() {
   const serviceWorker = files["service-worker.js"];
   const requiredIds = [
     "q", "kind", "technique", "platform", "source", "group", "severity", "maturity", "status", "sort",
-    "matrix", "list", "table", "dashboard", "panel", "p-body", "p-groups", "p-stages", "p-export-svg",
+    "matrix-shell", "matrix-header-scroll", "matrix-headings", "matrix-scroll", "matrix", "list", "table", "dashboard",
+    "panel", "p-body", "p-groups", "p-stages", "p-status", "p-export-svg",
     "result-count", "update-banner", "command-palette"
   ];
   requiredIds.forEach(id => {
@@ -586,8 +853,10 @@ export async function validateProject() {
   if (!/http-equiv=["']Content-Security-Policy["']/i.test(index)) add("index.html", "strict Content Security Policy meta is missing");
   if (/(?:src|href)=["']https?:\/\//i.test(index + css)) add("application", "unexpected remote runtime dependency found");
   if (/fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(index + css)) add("application", "external font dependency found");
-  if (!/\.column-header\s*\{[^}]*\btop:\s*0\s*;/s.test(css)) {
-    add("assets/style.css", "matrix column headers must use a zero sticky inset so they do not overlap the first card row");
+  const stickyColumnHeaders = /\.column-header\s*\{[^}]*\bposition:\s*sticky\s*;[^}]*\btop:\s*0\s*;/s.test(css);
+  const stickyHeaderRail = /\.matrix-header-scroll\s*\{[^}]*\bposition:\s*sticky\s*;[^}]*\btop:\s*[^;]+;/s.test(css);
+  if (!stickyColumnHeaders && !stickyHeaderRail) {
+    add("assets/style.css", "matrix tactic headers must remain sticky without overlapping the card rows");
   }
   if (!/\.column-header h2\s*\{[^}]*\bwhite-space:\s*nowrap\s*;/s.test(css)) {
     add("assets/style.css", "matrix tactic labels must preserve a consistent single-line header height");
@@ -601,7 +870,7 @@ export async function validateProject() {
   if (!core.includes("globalThis.PlaybookCore")) add("assets/core.js", "PlaybookCore global export is missing");
   if (!app.includes("__ATTACK_PLAYBOOK_STANDALONE__")) add("assets/app.js", "standalone service-worker guard is missing");
 
-  ["4.0.0", "CACHE_PREFIX", "assets/core.js", "assets/icon.svg", "request.mode === \"navigate\"", "SKIP_WAITING", "event.waitUntil"].forEach(marker => {
+  ["CACHE_REVISION", "CACHE_PREFIX", "DATA_URLS", "assets/core.js", "assets/icon.svg", "request.mode === \"navigate\"", "SKIP_WAITING", "event.waitUntil"].forEach(marker => {
     if (!serviceWorker.includes(marker)) add("service-worker.js", `missing required PWA control: ${marker}`);
   });
   if (/cache\.put\(event\.request/i.test(serviceWorker)) add("service-worker.js", "must not cache arbitrary request URLs");
@@ -611,9 +880,12 @@ export async function validateProject() {
     add("assets/icon.svg", "must be a scalable 512-by-512 manifest icon");
   }
 
-  if (index && css && core && app && files["data/playbooks.json"]) {
+  if (index && css && core && app && files["data/playbooks.json"] && files["data/event-catalog.json"] && files["data/attack-analytics.json"]) {
     try {
-      const expected = renderStandalone({ html: index, css, core, app, data: files["data/playbooks.json"] });
+      const expected = renderStandalone({
+        html: index, css, core, app, data: files["data/playbooks.json"],
+        eventCatalog: files["data/event-catalog.json"], attackAnalytics: files["data/attack-analytics.json"]
+      });
       if (files["standalone.html"] !== expected) add("standalone.html", "is stale; run npm run build");
     } catch (error) {
       add("standalone.html", `cannot be rendered deterministically: ${error.message}`);
