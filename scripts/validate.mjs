@@ -1,3 +1,4 @@
+import { validateWorkflow } from "./validate-workflow.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -346,6 +347,7 @@ function validateResponse(value, path, add) {
     add(path, "must be an object");
     return;
   }
+  if ("workflow" in value) validateWorkflow(value.workflow, path + ".workflow").forEach(message => add(path + ".workflow", message));
   RESPONSE_PHASES.forEach(phase => {
     if (!substantive(value[phase])) add(`${path}.${phase}`, "must contain operational guidance");
   });

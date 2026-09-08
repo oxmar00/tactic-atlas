@@ -743,3 +743,61 @@ test("content audit reports complete quality metrics for a valid contract fixtur
   assert.equal(report.response_workflows_complete, 1);
   assert.deepEqual(blockers, []);
 });
+
+
+test("every library workflow has explicit outcomes, reachable closure and failure recovery", async () => {
+ const { validateWorkflow } = await import("../scripts/validate-workflow.mjs");
+ const data=JSON.parse(await readFile(new URL("../data/playbooks.json",import.meta.url),"utf8"));
+ assert.ok(data.playbooks.length > 0);
+ assert.equal(data.playbooks.length,data.meta.counts.total);
+ for(const p of data.playbooks){
+  const w=p.response.workflow;
+  assert.deepEqual(validateWorkflow(w),[],p.id);
+  const model=Core.buildFlowchart(p);
+  assert.deepEqual(model,Core.buildFlowchart(p),"deterministic layout: "+p.id);
+  assert.deepEqual(model.nodes.filter(n=>!model.edges.some(e=>e.from===n.id)).map(n=>n.id).sort(),["close-benign","closure"],p.id);
+  assert.ok(w.nodes.find(n=>n.id==="urgency").row<w.nodes.find(n=>n.id==="analysis").row,"urgency precedes investigation");
+  for(const [from,to] of [["evidence-gap","analysis"],["revise-containment","containment"],["specialist","analysis"],["follow-up","analysis"]]){
+   assert.ok(w.edges.some(e=>e.from===from&&e.to===to),p.id+": failed action returns to response");
+  }
+  assert.ok(w.nodes.find(n=>n.id==="escalation").items.includes(p.response.escalation.at(-1).destination),"all escalation destinations are visible");
+  assert.ok(!model.nodes.some(n=>n.lines.some(l=>l.text.includes("…"))),"no silently truncated labels: "+p.id);
+  const overlaps=model.nodes.flatMap((a,i)=>model.nodes.slice(i+1).filter(b=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h));
+  assert.equal(overlaps.length,0,p.id);
+  for(const n of model.nodes) assert.ok(n.x>=0&&n.y>=0&&n.x+n.w<=model.width&&n.y+n.h<=model.height,"node on canvas");
+ }
+});
+
+test("workflow validation rejects missing, ambiguous, unreachable and nonterminating paths", async () => {
+ const { validateWorkflow } = await import("../scripts/validate-workflow.mjs");
+ const data=JSON.parse(await readFile(new URL("../data/playbooks.json",import.meta.url),"utf8"));
+ const base=data.playbooks[0].response.workflow;
+ const missing=structuredClone(base);missing.edges[0].to="absent";
+ assert.match(validateWorkflow(missing).join(" "),/missing node/);
+ const dead=structuredClone(base);dead.edges=dead.edges.filter(e=>e.from!=="evidence-gap");
+ assert.match(validateWorkflow(dead).join(" "),/dead end/);
+ const ambiguous=structuredClone(base);ambiguous.edges.find(e=>e.from==="confirmed"&&e.label==="no").label="yes";
+ assert.match(validateWorkflow(ambiguous).join(" "),/needs yes and no/);
+ const island=structuredClone(base);island.nodes.push({id:"island",kind:"phase",row:99,column:"spine",title:"Stranded",items:[]});island.edges.push({from:"island",to:"island",kind:"main",label:""});
+ assert.match(validateWorkflow(island).join(" "),/unreachable node/);
+ assert.match(validateWorkflow(island).join(" "),/no path to an explicit end/);
+});
+
+test("response rewrites are reproducible and retain unvalidated status", async () => {
+ const {improveResponses,PROFILES,SOURCES}=await import("../scripts/improve-response.mjs");
+ const data=JSON.parse(await readFile(new URL("../data/playbooks.json",import.meta.url),"utf8"));
+ assert.equal(Object.keys(PROFILES).length,6);
+ assert.equal(new Set(SOURCES.map(s=>s.id)).size,SOURCES.length);
+ const before=JSON.stringify(data);
+ assert.equal(JSON.stringify(improveResponses(data)),before,"re-running the authoring step must not drift");
+ for(const id of Object.keys(PROFILES)){
+  const p=data.playbooks.find(p=>p.id===id);
+  assert.equal(p.validation.status,"planned");
+  assert.equal(p.validation.evidence.length,0,"design work must not fabricate validation evidence");
+  assert.ok(p.queries.every(q=>q.adaptation_required&&q.validation_status==="planned"&&q.test_cases.length>=3));
+  assert.equal(p.detection.pseudocode,PROFILES[id].queries.map(q=>q.name+"\n"+q.query).join("\n\n"),"legacy detection projection cannot contradict revised queries");
+  assert.ok(!p.content_sections.some(s=>/detection.logic|incident.response|automation.opportunities/i.test(s.id+" "+s.title)));
+  assert.ok(p.response.containment.immediate.every(a=>a.approval&&a.verification&&a.rollback&&a.on_failure));
+  assert.ok(p.response.source_review.source_ids.every(id=>SOURCES.some(s=>s.id===id)));
+ }
+});
