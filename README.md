@@ -161,3 +161,9 @@ The application targets current stable Chrome, Microsoft Edge, Firefox, Safari, 
 ## License and attribution
 
 Code and project-authored content are released under the [MIT License](LICENSE). MITRE ATT&CK® is a registered trademark of The MITRE Corporation. This project is not affiliated with or endorsed by MITRE.
+
+## Response workflow review
+
+The [response review](reports/response-review.md) documents the full-library diagram audit, source research, six rewritten scenarios, and remaining validation work. The offline application shows each record's review scope and response sources.
+
+After regenerating playbook data, run node scripts/improve-response.mjs, then node scripts/build-standalone.mjs and node scripts/check.mjs. This preserves explicit response transitions and the maintained representative profiles.

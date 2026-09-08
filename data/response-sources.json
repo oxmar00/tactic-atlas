@@ -1,0 +1,262 @@
+{
+  "reviewed_at": "2026-09-08",
+  "method": "Targeted primary-source review; not an exhaustive internet survey.",
+  "sources": [
+    {
+      "id": "nist",
+      "title": "NIST SP 800-61 Rev. 3",
+      "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+      "applicability": "Shared response governance and risk management.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "cisa",
+      "title": "CISA incident response playbooks",
+      "url": "https://www.cisa.gov/sites/default/files/publications/Cybersecurity_Incident_Vulnerability_Response_Playbooks_508C.pdf",
+      "applicability": "Phase checklists and coordination. Federal notification deadlines are not adopted.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "cacao",
+      "title": "OASIS CACAO 2.0",
+      "url": "https://docs.oasis-open.org/cacao/security-playbooks/v2.0/security-playbooks-v2.0.html",
+      "applicability": "Explicit transitions and failure paths. This graph is not a CACAO implementation.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "ransom",
+      "title": "CISA StopRansomware Guide",
+      "url": "https://www.cisa.gov/stopransomware/ransomware-guide",
+      "applicability": "Ransomware coordination, isolation, evidence and protected recovery.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "ms-ir",
+      "title": "Microsoft response playbooks",
+      "url": "https://learn.microsoft.com/en-us/security/operations/incident-response-playbooks",
+      "applicability": "Investigation prerequisites and scenario-specific response.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "phish",
+      "title": "Microsoft phishing investigation",
+      "url": "https://learn.microsoft.com/en-us/security/zero-trust/security-operations-playbook-phishing",
+      "applicability": "Email evidence, recipient scope, interaction and follow-on investigation.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "spray",
+      "title": "Microsoft password spray investigation",
+      "url": "https://learn.microsoft.com/en-us/security/operations/incident-response-playbook-password-spray",
+      "applicability": "Separate attempted authentication from successful access.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "consent",
+      "title": "Microsoft app consent investigation",
+      "url": "https://learn.microsoft.com/en-us/security/operations/incident-response-playbook-app-consent",
+      "applicability": "Investigate permissions and consent; restrict malicious application access.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "revoke",
+      "title": "Microsoft revoke user access",
+      "url": "https://learn.microsoft.com/en-us/entra/identity/users/users-revoke-access",
+      "applicability": "Revocation depends on token and application session behavior.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "mailbox",
+      "title": "Microsoft compromised email account response",
+      "url": "https://learn.microsoft.com/en-us/defender-office-365/responding-to-a-compromised-email-account",
+      "applicability": "Mailbox rules, forwarding and account access.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "4662",
+      "title": "Microsoft Windows event 4662",
+      "url": "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4662",
+      "applicability": "Audit prerequisites, object access properties and subject logon identifier.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "sysmon",
+      "title": "Microsoft Sysmon",
+      "url": "https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon",
+      "applicability": "Process creation and access evidence with contextual analysis.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "sync",
+      "title": "Microsoft synchronization permissions",
+      "url": "https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/user-prov-sync/pwd-hash-sync-stops-work",
+      "applicability": "Approved synchronization services can legitimately hold replication rights.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "krbtgt",
+      "title": "Microsoft forest recovery: reset krbtgt",
+      "url": "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/forest-recovery-guide/ad-forest-recovery-reset-the-krbtgt-password",
+      "applicability": "Two-reset recovery depends on configured ticket lifetime and directory recovery conditions.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "cisco",
+      "title": "Cisco mailbox auto remediation",
+      "url": "https://www.cisco.com/c/en/us/td/docs/security/ces/user_guide/esa_user_guide_13-0/b_ESA_Admin_Guide_ces_13-0/b_ESA_Admin_Guide_ces_12_0_chapter_010100.html",
+      "applicability": "AsyncOS 13.0 capability reference: mailbox remediation differs from gateway quarantine. Verify deployed version and integration.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "forti",
+      "title": "FortiMail product capabilities",
+      "url": "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/FortiMail.pdf",
+      "applicability": "Post-delivery clawback capability; verify deployment, integration and permissions.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "forti-quarantine",
+      "title": "FortiMail quarantine administration",
+      "url": "https://docs.fortinet.com/document/fortimail/latest/administration-guide/907026/managing-the-quarantines",
+      "applicability": "Gateway quarantine does not establish recipient mailbox deletion.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "aws-framework",
+      "title": "AWS customer playbook framework",
+      "url": "https://github.com/aws-samples/aws-customer-playbook-framework",
+      "applicability": "Cloud scenario structure. Documentation CC BY-SA 4.0; code separately licensed. Linked, not imported.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "aws-iam",
+      "title": "AWS compromised credentials playbook",
+      "url": "https://github.com/aws-samples/aws-customer-playbook-framework/blob/main/docs/Compromised_IAM_Credentials.md",
+      "applicability": "Cloud identity scope and response reference. No text or code imported.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "aws-revoke",
+      "title": "AWS revoke role sessions",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_revoke-sessions.html",
+      "applicability": "Session cutoff and identity-type limitations.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "aws-key",
+      "title": "AWS access key management",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access-keys-admin-managed.html",
+      "applicability": "Deactivate compromised long-term keys; investigate temporary sessions separately.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "s3",
+      "title": "AWS S3 CloudTrail events",
+      "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html",
+      "applicability": "Object data events are not collected by default or in CloudTrail Event history.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "azure-storage",
+      "title": "Azure Blob Storage monitoring",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/monitor-blob-storage",
+      "applicability": "Storage resource logging and collection configuration.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "gcp-response",
+      "title": "Google Cloud threat investigation",
+      "url": "https://docs.cloud.google.com/security-command-center/docs/how-to-investigate-threats",
+      "applicability": "Finding-specific investigations and resource context.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "gcp-token",
+      "title": "Google Cloud token mitigation",
+      "url": "https://docs.cloud.google.com/architecture/bps-for-mitigating-gcloud-oauth-tokens",
+      "applicability": "Address service account keys and previously issued tokens separately.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "gcp-storage",
+      "title": "Google Cloud Storage audit logs",
+      "url": "https://docs.cloud.google.com/storage/docs/audit-logging",
+      "applicability": "Data Access audit records and required permissions.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "gcp-usage",
+      "title": "Google Cloud Storage usage logs",
+      "url": "https://docs.cloud.google.com/storage/docs/access-logs",
+      "applicability": "Public access and byte visibility may require usage logs.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "sigma",
+      "title": "Sigma detection library",
+      "url": "https://github.com/SigmaHQ/sigma",
+      "applicability": "Detection metadata and lifecycle reference. No rules imported; review rule licensing before reuse.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "elastic",
+      "title": "Elastic detection rules",
+      "url": "https://github.com/elastic/detection-rules",
+      "applicability": "Investigations and exception reference. Elastic License 2.0 rules not imported.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "splunk",
+      "title": "Splunk analytic stories",
+      "url": "https://research.splunk.com/stories/",
+      "applicability": "Related detection context; queries remain platform specific.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "attack-detections",
+      "title": "MITRE detection strategies",
+      "url": "https://attack.mitre.org/detectionstrategies/",
+      "applicability": "Behavioral detection reference; mapping is not proof of local coverage.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    },
+    {
+      "id": "cert-irm",
+      "title": "CERT Societe Generale IR methodologies",
+      "url": "https://github.com/certsocietegenerale/IRM",
+      "applicability": "Historical checklist comparison; not authority for current product commands.",
+      "type": "authoritative",
+      "accessed_at": "2026-09-08"
+    }
+  ]
+}

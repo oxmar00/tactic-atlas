@@ -443,7 +443,7 @@ function step(action, playbook, telemetry, index, phase) {
   const fields = uniq(telemetry.flatMap(item => item.normalized_fields)).slice(0, 14);
   return {
     id: `${phase}-${index + 1}`,
-    title: action.replace(/[.:].*$/, "").slice(0, 120),
+    title: action,
     action,
     rationale: `This step helps confirm, scope, or safely resolve ${playbook.id} ${playbook.name} while preserving decision evidence.`,
     systems: uniq(telemetry.map(item => item.source_name)).slice(0, 8),
