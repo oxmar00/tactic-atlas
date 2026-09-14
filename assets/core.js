@@ -1059,7 +1059,56 @@
     return node.lines.reduce((total, line) => total + (line.kind === "title" ? FLOW.titleHeight : FLOW.lineHeight), 0);
   }
 
+  // Explicit workflow edges keep evidence gaps, failed actions, and accepted closure distinct.
+  function buildOperationalFlowchart(playbook) {
+    const workflow = playbook.response.workflow;
+    const nodes = []; const edges = []; const margin = 24; const gap = 44;
+    const spineWidth = 344, branchWidth = 290, branchX = 444, centerX = margin + spineWidth / 2;
+    let y = margin;
+    const rows = [...new Set(workflow.nodes.map(node => node.row))].sort((a, b) => a - b);
+    rows.forEach(row => {
+      const members = workflow.nodes.filter(node => node.row === row).map(source => {
+        const decision = source.kind === "decision";
+        const maxChars = decision ? 22 : source.column === "branch" ? 38 : 46;
+        const lines = [
+          ...wrapText(source.title, decision ? 22 : source.column === "branch" ? 33 : 40, 100).map(text => ({ kind: "title", text })),
+          ...(source.items || []).flatMap(item => wrapText(item, maxChars, 100).map(text => ({ kind: "item", text })))
+        ];
+        const body = lines.reduce((sum, line) => sum + (line.kind === "title" ? FLOW.titleHeight : FLOW.lineHeight), 0);
+        const padding = decision ? body / 2 + FLOW.decisionPadding : FLOW.padding;
+        return { ...source, lines, padding, x: source.column === "branch" ? branchX : margin,
+          w: source.column === "branch" ? branchWidth : spineWidth, h: Math.max(FLOW.minHeight, body + padding * 2) };
+      });
+      const height = Math.max(...members.map(node => node.h));
+      members.forEach(node => { node.y = y + (height - node.h) / 2; nodes.push(node); });
+      y += height + gap;
+    });
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    let lane = 0;
+    workflow.edges.forEach(source => {
+      const from = byId.get(source.from), to = byId.get(source.to);
+      if (!from || !to) throw new Error("Workflow edge references a missing node");
+      let points, labelPoint;
+      if (source.kind === "branch") {
+        points = [[from.x + from.w, from.y + from.h / 2], [to.x, to.y + to.h / 2]];
+      } else if (source.kind === "return") {
+        const x = branchX + branchWidth + 24 + lane++ * 18;
+        const approachY = to.y - 16;
+        points = [[from.x + from.w, from.y + from.h / 2], [x, from.y + from.h / 2], [x, approachY], [centerX, approachY], [centerX, to.y]];
+        labelPoint = [from.x + from.w + 8, from.y + from.h / 2 - 6];
+      } else {
+        points = [[from.x + from.w / 2, from.y + from.h], [to.x + to.w / 2, to.y]];
+      }
+      edges.push({ ...source, points, labelPoint });
+    });
+    return { title: text(playbook.id) + " incident response flowchart",
+      summary: "Incident response flow for " + text(playbook.id) + " " + text(playbook.name) + ". " + workflow.scope + " " + workflow.edges.map(edge => edge.from + " -- " + (edge.label || "next") + " --> " + edge.to).join(". "),
+      width: branchX + branchWidth + 48 + lane * 18, height: y - gap + margin, centerX, nodes, edges,
+      metrics: { padding: FLOW.padding, lineHeight: FLOW.lineHeight, titleHeight: FLOW.titleHeight, decisionPadding: FLOW.decisionPadding }
+    };
+  }
   function buildFlowchart(playbook) {
+    if (playbook?.response?.workflow?.version === 1) return buildOperationalFlowchart(playbook);
     const response = playbook?.response || {};
     const tree = (Array.isArray(response.decision_tree) ? response.decision_tree : []).filter(node => node && typeof node === "object");
     const centerX = FLOW.marginX + FLOW.spineWidth / 2;

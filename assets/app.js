@@ -1380,6 +1380,7 @@
       brief.groupCount ? `${brief.groupCount} known threat group${brief.groupCount === 1 ? "" : "s"}` : null
     ].filter(Boolean);
     items.push({ label: "Readiness", value: readiness });
+    if (playbook.response.source_review) items.push({ label: "Response review", value: [playbook.response.source_review.scope, playbook.response.source_review.validation] });
     return [{ type: "key_value", items }];
   }
 
@@ -1419,10 +1420,11 @@
       { id: "structured-queries", stage: "detect", title: "Detection queries", order: 103, blocks: [{ type: "queries", items: playbook.queries }] },
       { id: "structured-validation", stage: "validate", title: "Validation procedure", order: 104, blocks: [{ type: "structured", value: playbook.validation }] },
       { id: "response-flowchart", stage: "respond", title: "Incident response flowchart", order: 104.5, blocks: [
-        { type: "paragraph", text: "Decision gates and phase sequence derived from this playbook's own response workflow. Follow the \"yes\" path down the spine; \"no\" outcomes branch to the right." },
+        { type: "paragraph", text: playbook.response.workflow?.scope || "Legacy response overview. Read the full procedures and record unresolved evidence before choosing a disposition." },
         { type: "flowchart", value: Core.buildFlowchart(playbook) }
       ] },
-      { id: "structured-response", stage: "respond", title: "Response — full procedures", order: 105, blocks: [{ type: "structured", value: playbook.response }] },
+      { id: "research-sources", stage: "reference", title: "Response sources and applicability", order: 105.5, blocks: [{ type: "structured", value: playbook.response.source_review }, { type: "references", items: playbook.references }] },
+      { id: "structured-response", stage: "respond", title: "Response — full procedures", order: 105, blocks: [{ type: "structured", value: Object.fromEntries(Object.entries(playbook.response).filter(([key]) => key !== "workflow")) }] },
       { id: "structured-lifecycle", stage: "reference", title: "Lifecycle & quality", order: 106, blocks: [{ type: "structured", value: { lifecycle: playbook.lifecycle, quality_breakdown: playbook.quality_breakdown, coverage: playbook.coverage, known_gaps: playbook.known_gaps } }] }
     ];
     const hunt = { id: "hunt-workflow", title: "Hunt workflow", order: 100.5, stage: "hunt", blocks: huntBlocks(playbook) };
@@ -1448,6 +1450,18 @@
     if (type === "code" || type === "query") { renderCodeBlock(parent, block); return; }
     if (type === "callout") { renderCallout(parent, block); return; }
     if (type === "telemetry") { renderTelemetry(parent, block.items || []); return; }
+    if (type === "references") {
+      const list = make("ul");
+      (block.items || []).forEach(reference => {
+        const item = make("li");
+        const url = Core.safeHttpUrl(reference.url);
+        if (url) { const link = make("a", null, reference.title || url); link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer"; item.append(link); }
+        else item.append(document.createTextNode(reference.title || "Reference"));
+        if (reference.applicability) item.append(make("p", null, reference.applicability));
+        list.append(item);
+      });
+      parent.append(list); return;
+    }
     if (type === "queries") { renderQueries(parent, block.items || []); return; }
     if (type === "flowchart") { renderFlowchart(parent, block.value); return; }
     appendStructuredValue(parent, block.value ?? block.text ?? block);
@@ -1583,7 +1597,7 @@
   function renderFlowchartNode(group, node, metrics) {
     group.append(flowchartNodeShape(node));
     const centered = ["start", "end", "decision"].includes(node.kind);
-    const padding = node.kind === "decision" ? metrics.decisionPadding : metrics.padding;
+    const padding = node.padding ?? (node.kind === "decision" ? metrics.decisionPadding : metrics.padding);
     const textNode = svgEl("text", {
       class: `flow-text flow-text-${node.kind}`,
       "text-anchor": centered ? "middle" : "start",
@@ -1617,8 +1631,8 @@
     const label = svgEl("text", {
       class: `flow-edge-label flow-edge-label-${edge.label}`,
       "text-anchor": horizontal ? "middle" : "start",
-      x: horizontal ? (start[0] + end[0]) / 2 : start[0] + 8,
-      y: horizontal ? start[1] - 6 : (start[1] + end[1]) / 2 + 4
+      x: edge.labelPoint?.[0] ?? (horizontal ? (start[0] + end[0]) / 2 : start[0] + 8),
+      y: edge.labelPoint?.[1] ?? (horizontal ? start[1] - 6 : (start[1] + end[1]) / 2 + 4)
     });
     label.textContent = edge.label;
     group.append(label);
