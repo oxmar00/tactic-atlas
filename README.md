@@ -13,6 +13,10 @@ Version 4 replaces executable content markup with a versioned JSON model. The br
 - Structured telemetry requirements, detection strategies, query examples, safe validation procedures, and full incident-response phases in every record. Event identifiers are cross-verified against MITRE's own detection-strategy analytics where available, with each verified entry linked back to its source analytic and detection strategy.
 - A generated incident-response flowchart in every playbook: decision gates with yes/no branches, phase sequence, and escalation exit, rendered as inline SVG and exportable as a standalone `.svg` file.
 - Saved and recently viewed playbooks, shareable URL state, browser history, deep links, previous/next navigation, and a keyboard command palette.
+- A local investigation workspace that turns pasted alert details into explained playbook suggestions, analyst-confirmed scope, triage and evidence tasks, entity tracking, a compact evidence graph, notes, and a Markdown handoff.
+- A local environment profile that reports required-telemetry fit without claiming collection health, plus guided and expert presentation modes backed by the same playbook data.
+- Separate completeness, ATT&CK mapping, event-identifier provenance, query adaptation, corpus validation, and environment-fit indicators. The completeness score is never presented as proof of validation.
+- Per-query local validation records for untested, passed, or failed outcomes, with environment notes and dates. These records stay in the browser and do not alter corpus confidence.
 - JSON, Markdown, and formula-safe CSV exports; print-friendly single-playbook output.
 - Dark/light themes, adjustable text and reading width, accessible dialogs, reduced-motion support, and responsive layouts.
 - Offline access after first load, an explicit update prompt, and a fully self-contained `standalone.html` edition.
@@ -133,6 +137,7 @@ Direct STIX enrichment is also supported with an explicit version: `npm run enha
 - URLs are parsed and restricted before assignment. External references require HTTPS and opener isolation.
 - URL state, storage, clipboard fallbacks, JSON input, prototype-mutating keys, and exports are bounded and validated.
 - CSV exports neutralize spreadsheet formula prefixes.
+- Investigation text, entities, notes, environment selections, and query validation records stay in bounded browser storage. Alert matching proposes leads from local content and never produces an automatic incident verdict.
 - The service worker caches only known successful same-origin application resources, scopes cache cleanup to this application, and uses a navigation-only HTML fallback.
 - `data/revision.json` fingerprints every deployed runtime source, so code-only and data-only releases install a distinct cache without coupling cache state to the data schema version.
 - The standalone build uses generated content hashes for inline scripts and styles and rejects unresolved local runtime dependencies.

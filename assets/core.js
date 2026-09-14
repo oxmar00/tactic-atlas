@@ -418,6 +418,196 @@
     });
   }
 
+  const ALERT_STOP_WORDS = new Set([
+    "alert", "event", "from", "have", "into", "with", "that", "this", "were", "when", "where",
+    "host", "user", "process", "source", "destination", "detected", "activity", "security", "technique", "execution"
+  ]);
+
+  function eventIdentifiers(playbook) {
+    return (Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [])
+      .flatMap(source => (Array.isArray(source?.event_ids) ? source.event_ids : []))
+      .map(reference => ({
+        id: text(typeof reference === "string" ? reference : reference?.id),
+        provenance: text(typeof reference === "object" ? reference?.provenance : ""),
+        provider: text(typeof reference === "object" ? reference?.provider || reference?.product : "")
+      }))
+      .filter(reference => reference.id);
+  }
+
+  function confidenceProfile(playbook, now = Date.now()) {
+    const mappings = Array.isArray(playbook?.tactic_mappings) ? playbook.tactic_mappings : [];
+    const mappingVerified = mappings.filter(mapping => mapping?.verified === true
+      || text(mapping?.status).toLowerCase() === "verified"
+      || /^attack-v[\d.]+-verified$/i.test(text(mapping?.provenance))).length;
+    const identifiers = eventIdentifiers(playbook);
+    const eventVerified = identifiers.filter(reference => /^attack-v[\d.]+-verified$/i.test(reference.provenance)).length;
+    const queries = Array.isArray(playbook?.queries) ? playbook.queries : [];
+    const adaptationRequired = queries.filter(query => query?.adaptation_required !== false).length;
+    const lastReviewed = text(playbook?.lifecycle?.last_reviewed || playbook?.lifecycle?.last_validation_date);
+    return {
+      completeness: Math.max(0, Math.min(100, number(playbook?.quality_score, 0))),
+      mappings: { verified: mappingVerified, total: mappings.length },
+      eventIds: { verified: eventVerified, total: identifiers.length },
+      queries: { adaptationRequired, total: queries.length },
+      validationStatus: validationStatus(playbook),
+      lastReviewed,
+      reviewAgeDays: daysSince(lastReviewed, now),
+      knownGapCount: Array.isArray(playbook?.known_gaps) ? playbook.known_gaps.length : 0
+    };
+  }
+
+  function environmentFit(playbook, selectedSources = []) {
+    const selected = new Set(list(selectedSources, 100).map(normalizeText));
+    const telemetry = Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [];
+    const required = telemetry.filter(source => text(source?.tier || source?.priority).toLowerCase() === "required");
+    const matches = source => [source?.id, source?.category, source?.source_name, source?.source_heading]
+      .map(normalizeText).some(value => value && selected.has(value));
+    const available = telemetry.filter(matches);
+    const requiredAvailable = required.filter(matches);
+    return {
+      configured: selected.size > 0,
+      available: available.length,
+      total: telemetry.length,
+      requiredAvailable: requiredAvailable.length,
+      requiredTotal: required.length,
+      missingRequired: required.filter(source => !matches(source)).map(source => text(source?.source_name || source?.id)).filter(Boolean)
+    };
+  }
+
+  function investigationSuggestions(playbooks, alertText, selectedSources = [], searchIndex = new Map(), limit = 8) {
+    const normalizedAlert = normalizeText(text(alertText).slice(0, 12000));
+    if (!normalizedAlert) return [];
+    const tokens = tokenizeQuery(normalizedAlert)
+      .flatMap(token => token.split(" "))
+      .filter(token => token.length >= 3 && !ALERT_STOP_WORDS.has(token))
+      .slice(0, 80);
+    const tokenSet = new Set(tokens);
+    const alertIds = new Set((normalizedAlert.match(/\bt\d{4}(?:\.\d{3})?\b/g) || []).map(value => value.toUpperCase()));
+    const alertNumbers = new Set((normalizedAlert.match(/\b\d{3,6}\b/g) || []));
+
+    const candidates = (Array.isArray(playbooks) ? playbooks : []).map(playbook => {
+      let score = 0;
+      const basis = [];
+      const techniqueIds = [playbook.id, ...playbook.techniques.map(item => item.id), ...playbook.subtechniques.map(item => item.id)]
+        .map(value => text(value).toUpperCase()).filter(Boolean);
+      const matchedTechnique = techniqueIds.find(id => alertIds.has(id));
+      if (matchedTechnique) { score += matchedTechnique === playbook.id.toUpperCase() ? 240 : 190; basis.push(`Technique ${matchedTechnique}`); }
+
+      const identifiers = eventIdentifiers(playbook);
+      const matchedEvents = [...new Set(identifiers.filter(reference => alertNumbers.has(reference.id)).map(reference => reference.id))].slice(0, 3);
+      if (matchedEvents.length) { score += 70 + (matchedEvents.length - 1) * 20; basis.push(`Event ${matchedEvents.join(", ")}`); }
+
+      const namedTechniques = [...playbook.techniques, ...playbook.subtechniques]
+        .map(item => normalizeText(item.name)).filter(value => value.length >= 4);
+      const matchedTechniqueName = namedTechniques.find(value => normalizedAlert.includes(value));
+      if (matchedTechniqueName && matchedTechniqueName !== normalizeText(playbook.name)) {
+        score += 140;
+        basis.push(`Technique name: ${matchedTechniqueName}`);
+      }
+
+      const nameTokens = normalizeText(playbook.name).split(" ").filter(token => token.length >= 4 && !ALERT_STOP_WORDS.has(token));
+      const matchedNameTokens = nameTokens.filter(token => tokenSet.has(token));
+      if (normalizedAlert.includes(normalizeText(playbook.name)) && normalizeText(playbook.name).length >= 5) {
+        score += 120;
+        basis.push(`Playbook name: ${playbook.name}`);
+      } else if (matchedNameTokens.length >= 2) {
+        score += matchedNameTokens.length * 32;
+        basis.push(`Name match: ${matchedNameTokens.slice(0, 3).join(", ")}`);
+      }
+
+      const matchedSignals = [...new Set((Array.isArray(playbook.search_terms) ? playbook.search_terms : [])
+        .map(normalizeText)
+        .filter(signal => signal.length >= 4 && !/^t\d{4}(?:\.\d{3})?$/.test(signal) && !/^\d+$/.test(signal)
+          && !ALERT_STOP_WORDS.has(signal) && normalizedAlert.includes(signal)))].slice(0, 4);
+      if (matchedSignals.length) {
+        score += Math.min(80, matchedSignals.length * 20);
+        basis.push(`Signal match: ${matchedSignals.slice(0, 3).join(", ")}`);
+      }
+
+      const fit = environmentFit(playbook, selectedSources);
+      if (fit.configured && fit.requiredTotal && fit.requiredAvailable === fit.requiredTotal) score += 20;
+      return { id: playbook.id, score, basis, environment: fit };
+    }).filter(result => result.score >= 45 && result.basis.length)
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    const relativeFloor = (candidates[0]?.score || 0) * .58;
+    return candidates.filter(result => result.score >= Math.max(45, relativeFloor))
+      .slice(0, Math.max(1, Math.min(20, number(limit, 8))));
+  }
+
+  function investigationTasks(playbooks) {
+    const tasks = [];
+    const seen = new Set();
+    const add = (playbook, type, value) => {
+      const label = text(typeof value === "string" ? value : value?.action || value?.title || value?.name);
+      if (!label) return;
+      const key = `${playbook.id}:${type}:${slugify(label).slice(0, 80)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      tasks.push({ id: key, playbookId: playbook.id, type, label });
+    };
+    (Array.isArray(playbooks) ? playbooks : []).forEach(playbook => {
+      (Array.isArray(playbook?.response?.triage) ? playbook.response.triage : []).slice(0, 3)
+        .forEach(item => add(playbook, "triage", item));
+      (Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [])
+        .filter(source => text(source?.tier || source?.priority).toLowerCase() === "required")
+        .slice(0, 3)
+        .forEach(source => add(playbook, "evidence", `Confirm ${text(source?.source_name || source?.id)} is available and healthy.`));
+    });
+    return tasks.slice(0, 80);
+  }
+
+  function investigationGraph(investigation, playbooks = []) {
+    const rootId = text(investigation?.id || "investigation");
+    const nodes = [{ id: rootId, label: text(investigation?.title || "Alert"), type: "alert" }];
+    const edges = [];
+    const entities = investigation?.entities && typeof investigation.entities === "object" ? investigation.entities : {};
+    Object.entries(entities).slice(0, 20).forEach(([kind, value]) => {
+      const label = text(value).slice(0, 160);
+      if (!label) return;
+      const id = `entity:${slugify(kind)}:${slugify(label).slice(0, 60)}`;
+      nodes.push({ id, label, type: "entity", kind: text(kind) });
+      edges.push({ from: rootId, to: id, label: text(kind) });
+    });
+    (Array.isArray(playbooks) ? playbooks : []).slice(0, 20).forEach(playbook => {
+      const id = `playbook:${playbook.id}`;
+      nodes.push({ id, label: `${playbook.id} ${playbook.name}`, type: "playbook" });
+      edges.push({ from: rootId, to: id, label: "suspected" });
+    });
+    return { nodes, edges };
+  }
+
+  function serializeInvestigationMarkdown(investigation, playbooks = [], tasks = []) {
+    const title = text(investigation?.title || "Security investigation");
+    const lines = [
+      `# ${title}`,
+      "",
+      `- **Case ID:** ${text(investigation?.id || "Local case")}`,
+      `- **Status:** ${text(investigation?.status || "active")}`,
+      `- **Created:** ${text(investigation?.createdAt || "Not recorded")}`,
+      `- **Updated:** ${text(investigation?.updatedAt || "Not recorded")}`,
+      "",
+      "## Alert",
+      "",
+      text(investigation?.alert || "No alert text recorded."),
+      "",
+      "## Entities",
+      ""
+    ];
+    const entities = investigation?.entities && typeof investigation.entities === "object" ? investigation.entities : {};
+    const entityRows = Object.entries(entities).filter(([, value]) => text(value));
+    lines.push(...(entityRows.length ? entityRows.map(([key, value]) => `- **${text(key)}:** ${text(value)}`) : ["No entities recorded."]));
+    lines.push("", "## Selected Playbooks", "");
+    lines.push(...(playbooks.length ? playbooks.map(playbook => {
+      const confidence = confidenceProfile(playbook);
+      return `- **${playbook.id}: ${playbook.name}** - completeness ${confidence.completeness}/100; ${confidence.eventIds.verified}/${confidence.eventIds.total} ATT&CK-verified event IDs; validation ${confidence.validationStatus}`;
+    }) : ["No playbooks selected."]));
+    lines.push("", "## Checklist", "");
+    const completed = investigation?.completed && typeof investigation.completed === "object" ? investigation.completed : {};
+    lines.push(...(tasks.length ? tasks.map(task => `- [${completed[task.id] ? "x" : " "}] ${task.label} (${task.playbookId})`) : ["No checklist items generated."]));
+    lines.push("", "## Analyst Notes", "", text(investigation?.notes || "No notes recorded."), "", "## Limitations", "", "Suggestions are based on text and identifier matches. They are not incident verdicts. Query validation records are local to this browser.", "");
+    return lines.join("\n");
+  }
+
   function limitedParam(params, name, allowed) {
     const value = text(params.get(name)).slice(0, MAX_FILTER_LENGTH);
     return !value || (allowed && !allowed.has(value)) ? "all" : value;
@@ -1162,6 +1352,12 @@
     buildSearchIndex,
     rankPlaybook,
     filterAndSortPlaybooks,
+    confidenceProfile,
+    environmentFit,
+    investigationSuggestions,
+    investigationTasks,
+    investigationGraph,
+    serializeInvestigationMarkdown,
     encodeUrlState,
     decodeUrlState,
     serializePlaybookMarkdown,

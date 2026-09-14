@@ -90,9 +90,17 @@
     </div>
 
     <div class="control-row">
+      <div class="workflow-actions" aria-label="Investigation tools">
+        <button class="primary-action" id="start-investigation" type="button"><span aria-hidden="true">+</span> Investigation <span class="case-count" id="active-case-count" hidden>1</span></button>
+        <button id="environment-button" type="button"><span aria-hidden="true">&#9881;</span> Environment</button>
+      </div>
       <div class="toggle-group" aria-label="Personal filters">
         <button id="favorites" type="button" aria-pressed="false"><span aria-hidden="true">☆</span> Saved</button>
         <button id="recent" type="button" aria-pressed="false"><span aria-hidden="true">◷</span> Recent</button>
+      </div>
+      <div class="mode-switcher" role="group" aria-label="Analyst detail level">
+        <button id="mode-guided" type="button" aria-pressed="true">Guided</button>
+        <button id="mode-expert" type="button" aria-pressed="false">Expert</button>
       </div>
       <div class="view-switcher" role="group" aria-label="View">
         <button id="v-matrix" type="button" aria-pressed="true">Matrix</button>
@@ -152,6 +160,7 @@
           <span class="status-badge" id="p-kind"></span>
           <span class="score-badge" id="p-score"></span>
           <div class="playbook-actions">
+            <button id="p-add-case" type="button" aria-pressed="false"><span aria-hidden="true">+</span><span class="sr-only">Add playbook to investigation</span></button>
             <button id="p-save" type="button" aria-pressed="false"><span aria-hidden="true">☆</span><span class="sr-only">Save playbook</span></button>
             <button id="p-copy" type="button"><span aria-hidden="true">⧉</span><span class="sr-only">Copy playbook link</span></button>
             <button id="p-print" type="button"><span aria-hidden="true">⌑</span><span class="sr-only">Print playbook</span></button>
@@ -165,6 +174,7 @@
         <p id="p-description"></p>
         <div class="playbook-tags" id="p-tags"></div>
         <div class="threat-group-tags" id="p-groups"></div>
+        <div class="confidence-strip" id="p-confidence" aria-label="Evidence confidence"></div>
         <div class="stage-tabs" id="p-stages" role="tablist" aria-label="Analyst workflow stage"></div>
       </header>
       <div class="playbook-layout">
@@ -177,6 +187,86 @@
         <span id="p-position" aria-live="polite"></span>
         <button id="p-next" type="button">Next →</button>
       </nav>
+    </div>
+  </dialog>
+
+  <dialog class="environment-dialog" id="environment-dialog" aria-labelledby="environment-title">
+    <div class="settings-shell">
+      <header class="dialog-heading">
+        <div>
+          <h2 id="environment-title">Environment profile</h2>
+          <p>Select telemetry that is available and healthy in your environment.</p>
+        </div>
+        <button id="env-close" type="button" aria-label="Close environment profile">✕</button>
+      </header>
+      <p class="evidence-boundary">This profile changes relevance and coverage indicators. It does not verify collection health or query compatibility.</p>
+      <div class="environment-summary" id="env-summary"></div>
+      <fieldset class="environment-options" id="env-options">
+        <legend>Available telemetry</legend>
+      </fieldset>
+    </div>
+  </dialog>
+
+  <dialog class="investigation-dialog" id="investigation-dialog" aria-labelledby="case-heading">
+    <div class="case-shell">
+      <header class="dialog-heading case-heading">
+        <div>
+          <span class="case-kicker">Local investigation</span>
+          <h2 id="case-heading">Start from an alert</h2>
+          <p>Suggestions explain their matches and require analyst confirmation.</p>
+        </div>
+        <button id="case-close" type="button" aria-label="Close investigation">✕</button>
+      </header>
+
+      <div class="case-intake">
+        <label for="case-title"><span>Case title</span><input id="case-title" type="text" maxlength="120" placeholder="Suspicious PowerShell on finance workstation"></label>
+        <label for="case-alert"><span>Alert or finding</span><textarea id="case-alert" rows="5" maxlength="12000" placeholder="Paste the alert name, event IDs, command line, process, user, host, IP address, or ATT&amp;CK technique..."></textarea></label>
+        <div class="case-intake-actions">
+          <p>Text matching proposes leads. It does not determine whether activity is malicious.</p>
+          <button class="primary-action" id="case-analyze" type="button">Analyze alert</button>
+        </div>
+      </div>
+
+      <div class="case-workspace" id="case-workspace" hidden>
+        <section class="case-overview" id="case-summary" aria-label="Investigation summary"></section>
+        <div class="case-grid">
+          <section class="case-panel case-suggestions-panel">
+            <div class="case-panel-heading"><h3>Suggested playbooks</h3><span>Confirm each lead</span></div>
+            <div id="case-suggestions"></div>
+          </section>
+          <section class="case-panel">
+            <div class="case-panel-heading"><h3>Selected playbooks</h3><span>Investigation scope</span></div>
+            <div id="case-selected"></div>
+          </section>
+          <section class="case-panel case-checklist-panel">
+            <div class="case-panel-heading"><h3>Triage and evidence</h3><span>Generated from selected playbooks</span></div>
+            <div id="case-checklist"></div>
+          </section>
+          <section class="case-panel">
+            <div class="case-panel-heading"><h3>Entities</h3><span>Analyst supplied</span></div>
+            <div class="entity-grid">
+              <label><span>Host</span><input id="entity-host" type="text" maxlength="160"></label>
+              <label><span>User</span><input id="entity-user" type="text" maxlength="160"></label>
+              <label><span>Process</span><input id="entity-process" type="text" maxlength="300"></label>
+              <label><span>IP address</span><input id="entity-ip" type="text" maxlength="160"></label>
+              <label><span>Domain</span><input id="entity-domain" type="text" maxlength="253"></label>
+            </div>
+          </section>
+          <section class="case-panel case-graph-panel">
+            <div class="case-panel-heading"><h3>Evidence graph</h3><span>Alert, entities, and suspected techniques</span></div>
+            <div id="case-graph"></div>
+          </section>
+          <section class="case-panel">
+            <div class="case-panel-heading"><h3>Analyst notes</h3><span>Stored in this browser</span></div>
+            <label class="sr-only" for="case-notes">Analyst notes</label>
+            <textarea id="case-notes" rows="8" maxlength="12000" placeholder="Record findings, decisions, evidence locations, and unresolved questions."></textarea>
+          </section>
+        </div>
+        <footer class="case-footer">
+          <button id="case-reset" type="button">Reset investigation</button>
+          <button class="primary-action" id="case-export" type="button">Export Markdown</button>
+        </footer>
+      </div>
     </div>
   </dialog>
 

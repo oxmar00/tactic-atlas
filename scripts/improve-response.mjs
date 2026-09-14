@@ -290,7 +290,7 @@ export function improveResponses(data) {
  }
  if(profile){
  p.detection.pseudocode=profile.queries.map(q=>q.name+"\n"+q.query).join("\n\n");
- p.detection.hypothesis="Unauthorized activity is supported by the scenario-specific evidence, scope and outcomes after checking exact approved explanations. Missing telemetry remains unknown."; 
+ p.detection.hypothesis="Unauthorized activity is supported by the scenario-specific evidence, scope and outcomes after checking exact approved explanations. Missing telemetry remains unknown.";
  p.detection.strategy={...p.detection.strategy,primary_logic:profile.queries.map(q=>q.query),supporting_signals:profile.investigation.map(s=>s.action),window:"Calibrate per source latency, scenario and retained history; document the chosen interval.",aggregation:"Use each query\u0027s explicit entity keys and window; preserve raw evidence and deduplication context."};
  p.detection.tuning={...p.detection.tuning,guidance:["Validate scoped exceptions using approved benign examples and attacker-like variants. No measured false-positive rate is asserted."]};
  p.detection.severity={default:p.severity,confidence:"medium",fidelity:"unvalidated",telemetry_confidence:"requires local validation",escalation_conditions:[profile.urgency],rationale:"Authored priority guidance; actual severity depends on evidence and business impact."};

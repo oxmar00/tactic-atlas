@@ -6,6 +6,8 @@
   const STORE = "tactic-atlas:v4";
   const LEGACY_STORE = "attack-playbook-console:v4";
   const RECENT_LIMIT = 16;
+  const CASE_TEXT_LIMIT = 12000;
+  const QUERY_VALIDATION_LIMIT = 1000;
   const VIEW_IDS = { matrix: "v-matrix", list: "v-list", table: "v-table", dashboard: "v-dashboard" };
   const FILTER_IDS = ["kind", "technique", "platform", "source", "group", "severity", "maturity", "status", "sort"];
   const state = {
@@ -36,6 +38,11 @@
     recentOnly: false,
     openId: null,
     stage: "overview",
+    analystMode: "guided",
+    environment: new Set(),
+    investigation: null,
+    investigationSuggestions: [],
+    queryValidation: {},
     panelSections: [],
     panelStages: [],
     renderFrame: 0,
@@ -56,10 +63,15 @@
     "favorites", "recent", "v-matrix", "v-list", "v-table", "v-dashboard", "tac-all", "tacbar",
     "clear", "empty-clear", "result-count", "active-filter-chips", "loading", "matrix-shell", "matrix-header-scroll", "matrix-headings", "matrix-scroll", "matrix", "list", "table", "dashboard", "empty",
     "theme", "command-button", "data-version", "data-freshness", "foot-count",
+    "start-investigation", "active-case-count", "environment-button", "mode-guided", "mode-expert",
     "foot-quality", "panel", "p-id", "p-kind", "p-score", "p-name", "p-description", "p-tags", "p-groups", "p-stages", "p-toc",
-    "p-body", "p-save", "p-copy", "p-print", "p-export-md", "p-export-json", "p-export-svg", "p-close", "p-prev", "p-next",
+    "p-body", "p-confidence", "p-add-case", "p-save", "p-copy", "p-print", "p-export-md", "p-export-json", "p-export-svg", "p-close", "p-prev", "p-next",
     "p-position", "p-status", "command-palette", "command-q", "command-results", "command-close", "toast", "offline-banner",
-    "update-banner", "update-reload", "update-dismiss"
+    "update-banner", "update-reload", "update-dismiss",
+    "environment-dialog", "env-close", "env-options", "env-summary",
+    "investigation-dialog", "case-close", "case-title", "case-alert", "case-analyze", "case-workspace", "case-summary",
+    "case-suggestions", "case-selected", "case-checklist", "case-graph", "case-notes", "case-export", "case-reset",
+    "entity-host", "entity-user", "entity-process", "entity-ip", "entity-domain"
   ];
   const ui = {};
   const lazySections = new WeakMap();
@@ -114,6 +126,7 @@
       return index;
     }, new Map());
     state.runtimeRevision = runtimeRevision;
+    state.investigation = sanitizeInvestigation(state.investigation);
     // Indexing 231 full records costs ~1.6s. Defer it so first paint is not blocked; any
     // search that lands before it finishes builds it on demand.
     state.searchIndex = new Map();
@@ -121,6 +134,7 @@
     state.favorites = new Set([...state.favorites].filter(id => state.byId.has(id)).slice(0, 500));
     state.recent = state.recent.filter(id => state.byId.has(id)).slice(0, RECENT_LIMIT);
     initializeFacets();
+    initializeEnvironmentOptions();
     applyLocationState();
     renderDatasetMeta();
     ui.loading.remove();
@@ -208,6 +222,10 @@
     ui["empty-clear"].addEventListener("click", clearFilters);
     document.addEventListener("click", handleContentClick);
     ui.theme.addEventListener("click", toggleTheme);
+    ui["start-investigation"].addEventListener("click", openInvestigation);
+    ui["environment-button"].addEventListener("click", openEnvironment);
+    ui["mode-guided"].addEventListener("click", () => setAnalystMode("guided"));
+    ui["mode-expert"].addEventListener("click", () => setAnalystMode("expert"));
     ui["command-button"].addEventListener("click", openCommandPalette);
     ui["command-close"].addEventListener("click", closeCommandPalette);
     ui["command-q"].addEventListener("input", renderCommandResults);
@@ -218,6 +236,7 @@
     ui.panel.addEventListener("click", event => { if (event.target === ui.panel) requestClosePanel(); });
     ui.panel.addEventListener("close", syncModalState);
     ui["p-close"].addEventListener("click", requestClosePanel);
+    ui["p-add-case"].addEventListener("click", toggleOpenPlaybookInCase);
     ui["p-save"].addEventListener("click", toggleOpenFavorite);
     ui["p-copy"].addEventListener("click", copyOpenLink);
     ui["p-print"].addEventListener("click", printOpenPlaybook);
@@ -234,6 +253,21 @@
     ui["p-stages"].addEventListener("keydown", handleStageKeys);
     ui["update-reload"].addEventListener("click", activateUpdate);
     ui["update-dismiss"].addEventListener("click", () => { ui["update-banner"].hidden = true; });
+    ui["environment-dialog"].addEventListener("cancel", event => { event.preventDefault(); closeEnvironment(); });
+    ui["environment-dialog"].addEventListener("click", event => { if (event.target === ui["environment-dialog"]) closeEnvironment(); });
+    ui["env-close"].addEventListener("click", closeEnvironment);
+    ui["env-options"].addEventListener("change", updateEnvironment);
+    ui["investigation-dialog"].addEventListener("cancel", event => { event.preventDefault(); closeInvestigation(); });
+    ui["investigation-dialog"].addEventListener("click", event => { if (event.target === ui["investigation-dialog"]) closeInvestigation(); });
+    ui["case-close"].addEventListener("click", closeInvestigation);
+    ui["case-analyze"].addEventListener("click", analyzeInvestigation);
+    ui["case-suggestions"].addEventListener("click", handleSuggestionAction);
+    ui["case-selected"].addEventListener("click", handleSelectedPlaybookAction);
+    ui["case-checklist"].addEventListener("change", updateChecklist);
+    ui["case-export"].addEventListener("click", exportInvestigation);
+    ui["case-reset"].addEventListener("click", resetInvestigation);
+    ui["case-notes"].addEventListener("input", updateInvestigationNotes);
+    ["host", "user", "process", "ip", "domain"].forEach(key => ui[`entity-${key}`].addEventListener("input", () => updateInvestigationEntity(key)));
     window.addEventListener("online", updateOnlineState);
     window.addEventListener("offline", updateOnlineState);
     window.addEventListener("popstate", applyLocationState);
@@ -304,6 +338,73 @@
       fragment.append(option);
     });
     select.replaceChildren(fragment);
+  }
+
+  function initializeEnvironmentOptions() {
+    const sources = new Map();
+    state.playbooks.forEach(playbook => playbook.telemetry_requirements.forEach(source => {
+      const id = String(source.id || source.category || "").trim();
+      if (!id) return;
+      const existing = sources.get(id) || { id, label: source.source_name || humanize(id), count: 0, required: 0 };
+      existing.count++;
+      if (String(source.tier || source.priority).toLowerCase() === "required") existing.required++;
+      sources.set(id, existing);
+    }));
+    const fragment = document.createDocumentFragment();
+    [...sources.values()].sort((a, b) => b.required - a.required || b.count - a.count || a.label.localeCompare(b.label)).forEach(source => {
+      const label = make("label", "environment-option");
+      const input = make("input");
+      input.type = "checkbox";
+      input.value = source.id;
+      input.checked = state.environment.has(source.id);
+      label.append(input, make("span", null, source.label), make("small", null, `${source.count} playbooks`));
+      fragment.append(label);
+    });
+    ui["env-options"].append(fragment);
+    renderEnvironmentSummary();
+  }
+
+  function renderEnvironmentSummary() {
+    const count = state.environment.size;
+    ui["env-summary"].textContent = count
+      ? `${count} telemetry source${count === 1 ? "" : "s"} marked available`
+      : "No profile configured. Coverage will be shown as unknown.";
+  }
+
+  function setAnalystMode(mode) {
+    if (!['guided', 'expert'].includes(mode)) return;
+    state.analystMode = mode;
+    applyAppearance();
+    syncControls();
+    savePreferences();
+    if (state.openId) renderPanel(state.byId.get(state.openId));
+    if (ui["investigation-dialog"].open) renderInvestigation();
+    toast(`${humanize(mode)} mode enabled`);
+  }
+
+  function openEnvironment() {
+    if (ui.panel.open || ui["command-palette"].open || ui["investigation-dialog"].open) {
+      toast("Close the open workspace before editing the environment profile");
+      return;
+    }
+    ui["env-options"].querySelectorAll("input[type='checkbox']").forEach(input => { input.checked = state.environment.has(input.value); });
+    renderEnvironmentSummary();
+    ui["environment-dialog"].showModal();
+    syncModalState();
+    ui["env-close"].focus();
+  }
+
+  function closeEnvironment() {
+    if (ui["environment-dialog"].open) ui["environment-dialog"].close();
+    syncModalState();
+  }
+
+  function updateEnvironment() {
+    state.environment = new Set([...ui["env-options"].querySelectorAll("input:checked")].map(input => input.value).slice(0, 100));
+    renderEnvironmentSummary();
+    savePreferences();
+    if (state.openId) renderConfidenceStrip(state.byId.get(state.openId));
+    if (state.investigation?.alert) refreshInvestigationSuggestions();
   }
 
   function applyLocationState() {
@@ -412,6 +513,10 @@
     ui.favorites.setAttribute("aria-pressed", String(state.favoritesOnly));
     ui.favorites.firstElementChild.textContent = state.favoritesOnly ? "★" : "☆";
     ui.recent.setAttribute("aria-pressed", String(state.recentOnly));
+    ui["mode-guided"].setAttribute("aria-pressed", String(state.analystMode === "guided"));
+    ui["mode-expert"].setAttribute("aria-pressed", String(state.analystMode === "expert"));
+    ui["active-case-count"].hidden = !state.investigation;
+    ui["start-investigation"].classList.toggle("has-case", Boolean(state.investigation));
     ui.tacbar.querySelectorAll("[data-tactic]").forEach(button => button.setAttribute("aria-pressed", String(state.tactics.has(button.dataset.tactic))));
   }
 
@@ -773,11 +878,13 @@
     ui["p-status"].textContent = "";
     ui["p-id"].textContent = playbook.id;
     ui["p-kind"].textContent = humanize(playbook.kind);
-    ui["p-score"].textContent = `Quality ${playbook.quality_score}`;
+    ui["p-score"].textContent = `Completeness ${playbook.quality_score}`;
+    ui["p-score"].title = "Content completeness score. This is not a validation result.";
     ui["p-name"].textContent = playbook.name;
     ui["p-description"].textContent = playbook.description || "Structured detection and incident-response playbook.";
     renderPanelTags(playbook);
     renderPanelThreatGroups(playbook);
+    renderConfidenceStrip(playbook);
     state.panelSections = sectionsFor(playbook).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
     state.panelStages = stagesFor(state.panelSections);
     if (!state.panelStages.some(stage => stage.id === state.stage)) {
@@ -787,6 +894,7 @@
     renderStageSections();
     ui["p-body"].scrollTop = 0;
     syncOpenFavorite();
+    syncOpenCaseButton();
     syncPanelNavigation();
   }
 
@@ -898,6 +1006,359 @@
     });
     if (groups.length > shown.length) fragment.append(make("span", "group-badge-more", `+${groups.length - shown.length} more`));
     ui["p-groups"].replaceChildren(fragment);
+  }
+
+  function confidenceMetric(label, value, explanation, tone = "neutral") {
+    const item = make("div", `confidence-metric confidence-${tone}`);
+    item.append(make("span", null, label), make("strong", null, value));
+    if (explanation) item.append(make("small", "guided-only", explanation));
+    return item;
+  }
+
+  function renderConfidenceStrip(playbook) {
+    const profile = Core.confidenceProfile(playbook);
+    const fit = Core.environmentFit(playbook, [...state.environment]);
+    const fragment = document.createDocumentFragment();
+    const mappings = profile.mappings.total
+      ? `${profile.mappings.verified}/${profile.mappings.total} verified`
+      : "Not claimed";
+    fragment.append(confidenceMetric("ATT&CK mapping", mappings, "Verified means the mapping carries an explicit verified marker; review-required mappings remain separate.", profile.mappings.verified === profile.mappings.total ? "good" : "warn"));
+    fragment.append(confidenceMetric("Event identifiers", `${profile.eventIds.verified}/${profile.eventIds.total} verified`, "Verification is against the versioned ATT&CK detection-strategy evidence bundled with this library.", profile.eventIds.total && profile.eventIds.verified === profile.eventIds.total ? "good" : "warn"));
+    fragment.append(confidenceMetric("Detection queries", profile.queries.total ? `${profile.queries.adaptationRequired}/${profile.queries.total} need adaptation` : "None", "Local field mapping, syntax review, and performance testing are still required before production use.", profile.queries.adaptationRequired ? "warn" : "good"));
+    fragment.append(confidenceMetric("Validation", humanize(profile.validationStatus), "This is the corpus validation status, not a claim about your environment.", /validated|executed|passed/i.test(profile.validationStatus) ? "good" : "warn"));
+    fragment.append(confidenceMetric("Last reviewed", profile.lastReviewed || "Unknown", profile.reviewAgeDays == null ? "No parseable review date is available." : `${profile.reviewAgeDays} days before today.`, profile.reviewAgeDays != null && profile.reviewAgeDays <= 180 ? "good" : "warn"));
+    fragment.append(confidenceMetric("Environment fit", fit.configured ? `${fit.requiredAvailable}/${fit.requiredTotal} required sources` : "Unknown", fit.configured ? (fit.missingRequired.length ? `Missing: ${fit.missingRequired.join(", ")}` : "All required sources are marked available in your local profile.") : "Configure available telemetry to calculate local fit.", fit.configured && !fit.missingRequired.length ? "good" : "neutral"));
+    ui["p-confidence"].replaceChildren(fragment);
+  }
+
+  function emptyInvestigation() {
+    const now = new Date().toISOString();
+    const suffix = String(Date.now()).slice(-6);
+    return {
+      version: 1,
+      id: `INV-${now.slice(0, 10).replaceAll("-", "")}-${suffix}`,
+      title: "",
+      alert: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      selectedPlaybooks: [],
+      entities: { host: "", user: "", process: "", ip: "", domain: "" },
+      completed: {},
+      notes: ""
+    };
+  }
+
+  function sanitizeInvestigation(value) {
+    if (!value || typeof value !== "object") return null;
+    const safeText = (item, limit) => typeof item === "string" ? item.slice(0, limit) : "";
+    const entities = value.entities && typeof value.entities === "object" ? value.entities : {};
+    const selectedPlaybooks = Array.isArray(value.selectedPlaybooks)
+      ? [...new Set(value.selectedPlaybooks.filter(id => typeof id === "string" && state.byId.has(id)))].slice(0, 30)
+      : [];
+    const completed = {};
+    if (value.completed && typeof value.completed === "object") {
+      Object.entries(value.completed).slice(0, 200).forEach(([key, checked]) => { if (checked === true) completed[safeText(key, 220)] = true; });
+    }
+    return {
+      version: 1,
+      id: safeText(value.id, 80) || emptyInvestigation().id,
+      title: safeText(value.title, 120),
+      alert: safeText(value.alert, CASE_TEXT_LIMIT),
+      status: "active",
+      createdAt: safeText(value.createdAt, 40) || new Date().toISOString(),
+      updatedAt: safeText(value.updatedAt, 40) || new Date().toISOString(),
+      selectedPlaybooks,
+      entities: {
+        host: safeText(entities.host, 160), user: safeText(entities.user, 160), process: safeText(entities.process, 300),
+        ip: safeText(entities.ip, 160), domain: safeText(entities.domain, 253)
+      },
+      completed,
+      notes: safeText(value.notes, CASE_TEXT_LIMIT)
+    };
+  }
+
+  function openInvestigation() {
+    if (ui.panel.open || ui["command-palette"].open || ui["environment-dialog"].open) {
+      toast("Close the open workspace before opening the investigation");
+      return;
+    }
+    const investigation = state.investigation;
+    ui["case-title"].value = investigation?.title || "";
+    ui["case-alert"].value = investigation?.alert || "";
+    renderInvestigation();
+    ui["investigation-dialog"].showModal();
+    ui["case-workspace"].scrollTop = 0;
+    syncModalState();
+    (investigation ? ui["case-close"] : ui["case-title"]).focus();
+  }
+
+  function closeInvestigation() {
+    if (ui["investigation-dialog"].open) ui["investigation-dialog"].close();
+    syncModalState();
+  }
+
+  function analyzeInvestigation() {
+    const alert = ui["case-alert"].value.trim().slice(0, CASE_TEXT_LIMIT);
+    if (!alert) {
+      toast("Add an alert or finding before analyzing");
+      ui["case-alert"].focus();
+      return;
+    }
+    const investigation = state.investigation || emptyInvestigation();
+    investigation.alert = alert;
+    investigation.title = ui["case-title"].value.trim().slice(0, 120) || alert.split(/\r?\n/)[0].slice(0, 120) || "Security investigation";
+    investigation.updatedAt = new Date().toISOString();
+    state.investigation = sanitizeInvestigation(investigation);
+    refreshInvestigationSuggestions();
+    savePreferences();
+    renderInvestigation();
+    syncControls();
+  }
+
+  function refreshInvestigationSuggestions() {
+    state.investigationSuggestions = state.investigation?.alert
+      ? Core.investigationSuggestions(state.playbooks, state.investigation.alert, [...state.environment], ensureSearchIndex(), 8)
+      : [];
+    if (ui["investigation-dialog"].open) renderInvestigationSuggestions();
+  }
+
+  function selectedCasePlaybooks() {
+    return (state.investigation?.selectedPlaybooks || []).map(id => state.byId.get(id)).filter(Boolean);
+  }
+
+  function renderInvestigation() {
+    const investigation = state.investigation;
+    ui["case-workspace"].hidden = !investigation;
+    if (!investigation) return;
+    ui["case-title"].value = investigation.title;
+    ui["case-alert"].value = investigation.alert;
+    ui["case-notes"].value = investigation.notes;
+    Object.entries(investigation.entities).forEach(([key, value]) => { if (ui[`entity-${key}`]) ui[`entity-${key}`].value = value; });
+    if (!state.investigationSuggestions.length && investigation.alert) refreshInvestigationSuggestions();
+    const tasks = Core.investigationTasks(selectedCasePlaybooks());
+    const completed = tasks.filter(task => investigation.completed[task.id]).length;
+    const summary = document.createDocumentFragment();
+    summary.append(
+      confidenceMetric("Case", investigation.id, "Stored only in this browser."),
+      confidenceMetric("Scope", `${investigation.selectedPlaybooks.length} playbook${investigation.selectedPlaybooks.length === 1 ? "" : "s"}`, "Only analyst-confirmed playbooks become part of the case."),
+      confidenceMetric("Checklist", tasks.length ? `${completed}/${tasks.length} complete` : "Waiting", "Tasks are generated from selected playbooks and remain analyst-controlled."),
+      confidenceMetric("Environment", state.environment.size ? `${state.environment.size} sources` : "Not configured", "Environment availability is self-reported and does not prove collection health.", state.environment.size ? "good" : "neutral")
+    );
+    ui["case-summary"].replaceChildren(summary);
+    renderInvestigationSuggestions();
+    renderSelectedPlaybooks();
+    renderInvestigationChecklist(tasks);
+    renderInvestigationGraph();
+  }
+
+  function renderInvestigationSuggestions() {
+    const selected = new Set(state.investigation?.selectedPlaybooks || []);
+    const fragment = document.createDocumentFragment();
+    state.investigationSuggestions.forEach(result => {
+      const playbook = state.byId.get(result.id);
+      if (!playbook) return;
+      const item = make("article", "case-playbook-item");
+      const heading = make("div", "case-playbook-heading");
+      const title = make("button", "case-playbook-link", `${playbook.id}: ${playbook.name}`);
+      title.type = "button";
+      title.dataset.openCasePlaybook = playbook.id;
+      const add = make("button", "case-add-button", selected.has(playbook.id) ? "Added" : "Add");
+      add.type = "button";
+      add.dataset.addCasePlaybook = playbook.id;
+      add.disabled = selected.has(playbook.id);
+      heading.append(title, add);
+      const reasons = make("div", "match-reasons");
+      result.basis.forEach(reason => reasons.append(make("span", null, reason)));
+      if (result.environment.configured) reasons.append(make("span", result.environment.missingRequired.length ? "match-warning" : "match-fit", result.environment.missingRequired.length ? "Required telemetry gap" : "Required telemetry available"));
+      item.append(heading, reasons);
+      fragment.append(item);
+    });
+    if (!state.investigationSuggestions.length) fragment.append(make("p", "case-empty", "No strong match found. Search the library manually or add a known technique from its playbook."));
+    ui["case-suggestions"].replaceChildren(fragment);
+  }
+
+  function renderSelectedPlaybooks() {
+    const fragment = document.createDocumentFragment();
+    selectedCasePlaybooks().forEach(playbook => {
+      const item = make("div", "selected-playbook");
+      const open = make("button", "case-playbook-link", `${playbook.id}: ${playbook.name}`);
+      open.type = "button";
+      open.dataset.openCasePlaybook = playbook.id;
+      const remove = make("button", "icon-remove", "×");
+      remove.type = "button";
+      remove.dataset.removeCasePlaybook = playbook.id;
+      remove.setAttribute("aria-label", `Remove ${playbook.id} from investigation`);
+      item.append(open, remove);
+      fragment.append(item);
+    });
+    if (!fragment.childNodes.length) fragment.append(make("p", "case-empty", "No playbooks selected yet."));
+    ui["case-selected"].replaceChildren(fragment);
+  }
+
+  function renderInvestigationChecklist(tasks = Core.investigationTasks(selectedCasePlaybooks())) {
+    const fragment = document.createDocumentFragment();
+    tasks.forEach(task => {
+      const label = make("label", "case-task");
+      const input = make("input");
+      input.type = "checkbox";
+      input.value = task.id;
+      input.checked = Boolean(state.investigation?.completed[task.id]);
+      label.append(input, make("span", null, task.label), make("small", null, `${humanize(task.type)} · ${task.playbookId}`));
+      fragment.append(label);
+    });
+    if (!tasks.length) fragment.append(make("p", "case-empty", "Select a playbook to generate triage and evidence tasks."));
+    ui["case-checklist"].replaceChildren(fragment);
+  }
+
+  function graphNode(svg, x, y, width, label, type) {
+    const group = svgEl("g", { class: `case-graph-node graph-${type}` });
+    group.append(svgEl("rect", { x, y: y - 20, width, height: 40, rx: 6 }));
+    const textNode = svgEl("text", { x: x + 10, y: y + 4 });
+    textNode.textContent = label.length > 34 ? `${label.slice(0, 33)}…` : label;
+    group.append(textNode);
+    svg.append(group);
+  }
+
+  function renderInvestigationGraph() {
+    const playbooks = selectedCasePlaybooks();
+    const graph = Core.investigationGraph(state.investigation, playbooks);
+    const entities = graph.nodes.filter(node => node.type === "entity");
+    const techniques = graph.nodes.filter(node => node.type === "playbook");
+    const rows = Math.max(entities.length, techniques.length, 1);
+    const height = Math.max(180, rows * 54 + 50);
+    const svg = svgEl("svg", { class: "case-graph", viewBox: `0 0 820 ${height}`, role: "img", "aria-label": "Investigation evidence graph" });
+    const rootY = height / 2;
+    const position = new Map([[graph.nodes[0].id, { x: 24, y: rootY, width: 210 }]]);
+    entities.forEach((node, index) => position.set(node.id, { x: 305, y: 42 + index * 54, width: 200 }));
+    techniques.forEach((node, index) => position.set(node.id, { x: 575, y: 42 + index * 54, width: 220 }));
+    graph.edges.forEach(edge => {
+      const from = position.get(edge.from);
+      const to = position.get(edge.to);
+      if (!from || !to) return;
+      svg.append(svgEl("line", { class: "case-graph-edge", x1: from.x + from.width, y1: from.y, x2: to.x, y2: to.y }));
+    });
+    graph.nodes.forEach(node => {
+      const point = position.get(node.id);
+      if (point) graphNode(svg, point.x, point.y, point.width, node.label, node.type);
+    });
+    const wrapper = make("div", "case-graph-wrap");
+    wrapper.tabIndex = 0;
+    wrapper.append(svg);
+    if (graph.nodes.length === 1) wrapper.append(make("p", "case-empty", "Add entities or playbooks to build the graph."));
+    ui["case-graph"].replaceChildren(wrapper);
+  }
+
+  function addPlaybookToCase(id) {
+    const playbook = state.byId.get(id);
+    if (!playbook) return;
+    state.investigation ||= emptyInvestigation();
+    if (!state.investigation.title) state.investigation.title = "Security investigation";
+    if (!state.investigation.selectedPlaybooks.includes(id)) state.investigation.selectedPlaybooks.push(id);
+    state.investigation.updatedAt = new Date().toISOString();
+    state.investigation = sanitizeInvestigation(state.investigation);
+    savePreferences();
+    syncControls();
+    syncOpenCaseButton();
+    if (ui["investigation-dialog"].open) renderInvestigation();
+    toast(`${playbook.id} added to investigation`);
+  }
+
+  function removePlaybookFromCase(id) {
+    if (!state.investigation) return;
+    state.investigation.selectedPlaybooks = state.investigation.selectedPlaybooks.filter(value => value !== id);
+    state.investigation.updatedAt = new Date().toISOString();
+    savePreferences();
+    syncOpenCaseButton();
+    renderInvestigation();
+  }
+
+  function handleSuggestionAction(event) {
+    const add = event.target.closest("[data-add-case-playbook]");
+    if (add) { addPlaybookToCase(add.dataset.addCasePlaybook); return; }
+    const open = event.target.closest("[data-open-case-playbook]");
+    if (open) { closeInvestigation(); openPlaybook(open.dataset.openCasePlaybook); }
+  }
+
+  function handleSelectedPlaybookAction(event) {
+    const remove = event.target.closest("[data-remove-case-playbook]");
+    if (remove) { removePlaybookFromCase(remove.dataset.removeCasePlaybook); return; }
+    const open = event.target.closest("[data-open-case-playbook]");
+    if (open) { closeInvestigation(); openPlaybook(open.dataset.openCasePlaybook); }
+  }
+
+  function updateChecklist(event) {
+    if (!state.investigation || event.target.type !== "checkbox") return;
+    if (event.target.checked) state.investigation.completed[event.target.value] = true;
+    else delete state.investigation.completed[event.target.value];
+    state.investigation.updatedAt = new Date().toISOString();
+    savePreferences();
+    renderInvestigation();
+  }
+
+  function updateInvestigationEntity(key) {
+    if (!state.investigation || !Object.hasOwn(state.investigation.entities, key)) return;
+    const limits = { host: 160, user: 160, process: 300, ip: 160, domain: 253 };
+    state.investigation.entities[key] = ui[`entity-${key}`].value.slice(0, limits[key]);
+    state.investigation.updatedAt = new Date().toISOString();
+    savePreferences();
+    renderInvestigationGraph();
+  }
+
+  function updateInvestigationNotes() {
+    if (!state.investigation) return;
+    state.investigation.notes = ui["case-notes"].value.slice(0, CASE_TEXT_LIMIT);
+    state.investigation.updatedAt = new Date().toISOString();
+    savePreferences();
+  }
+
+  function exportInvestigation() {
+    if (!state.investigation) return;
+    const playbooks = selectedCasePlaybooks();
+    const tasks = Core.investigationTasks(playbooks);
+    const markdown = Core.serializeInvestigationMarkdown(state.investigation, playbooks, tasks);
+    downloadText(Core.safeFilename(`${state.investigation.id}-${state.investigation.title}`, "md"), markdown, "text/markdown");
+    toast("Investigation export created");
+  }
+
+  let resetCaseTimer = 0;
+  function resetInvestigation() {
+    if (ui["case-reset"].dataset.confirm !== "true") {
+      ui["case-reset"].dataset.confirm = "true";
+      ui["case-reset"].textContent = "Confirm reset";
+      clearTimeout(resetCaseTimer);
+      resetCaseTimer = setTimeout(() => {
+        ui["case-reset"].dataset.confirm = "false";
+        ui["case-reset"].textContent = "Reset investigation";
+      }, 4000);
+      return;
+    }
+    clearTimeout(resetCaseTimer);
+    state.investigation = null;
+    state.investigationSuggestions = [];
+    ui["case-title"].value = "";
+    ui["case-alert"].value = "";
+    ui["case-workspace"].hidden = true;
+    ui["case-reset"].dataset.confirm = "false";
+    ui["case-reset"].textContent = "Reset investigation";
+    savePreferences();
+    syncControls();
+    syncOpenCaseButton();
+    toast("Local investigation reset");
+  }
+
+  function syncOpenCaseButton() {
+    const included = Boolean(state.investigation?.selectedPlaybooks.includes(state.openId));
+    ui["p-add-case"].setAttribute("aria-pressed", String(included));
+    ui["p-add-case"].firstElementChild.textContent = included ? "✓" : "+";
+    const accessible = ui["p-add-case"].querySelector(".sr-only");
+    if (accessible) accessible.textContent = included ? "Remove playbook from investigation" : "Add playbook to investigation";
+  }
+
+  function toggleOpenPlaybookInCase() {
+    if (!state.openId) return;
+    if (state.investigation?.selectedPlaybooks.includes(state.openId)) removePlaybookFromCase(state.openId);
+    else addPlaybookToCase(state.openId);
   }
 
   function briefBlocks(playbook) {
@@ -1315,10 +1776,56 @@
       wrapper.append(pre);
       const extra = Object.entries(query).filter(([key, value]) => !["id", "name", "platform", "language", "query", "description"].includes(key) && nonEmpty(value)).map(([key, value]) => ({ label: humanize(key), value }));
       if (extra.length) renderKeyValueBlock(wrapper, extra);
+      renderQueryValidation(wrapper, query);
       grid.append(wrapper);
     });
     if (!queries.length) grid.append(make("p", "metric-note", "No structured query example is available."));
     parent.append(grid);
+  }
+
+  function queryValidationKey(query) {
+    return `${state.openId || "unknown"}:${String(query?.id || query?.name || "query").slice(0, 160)}`;
+  }
+
+  function renderQueryValidation(parent, query) {
+    const key = queryValidationKey(query);
+    const record = state.queryValidation[key] || { status: "untested", notes: "", testedAt: "" };
+    const section = make("section", "query-validation");
+    const heading = make("div", "query-validation-heading");
+    heading.append(make("strong", null, "Your validation"), make("span", "guided-only", "Local record; does not change corpus confidence"));
+    const controls = make("div", "validation-status", null);
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", `Validation status for ${query.name}`);
+    ["untested", "passed", "failed"].forEach(status => {
+      const button = make("button", null, humanize(status));
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(record.status === status));
+      button.addEventListener("click", () => {
+        const next = state.queryValidation[key] || { notes: "" };
+        next.status = status;
+        next.testedAt = status === "untested" ? "" : new Date().toISOString();
+        state.queryValidation[key] = next;
+        [...controls.children].forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        tested.textContent = next.testedAt ? `Recorded ${next.testedAt.slice(0, 10)}` : "No local test recorded";
+        savePreferences();
+      });
+      controls.append(button);
+    });
+    const notes = make("input", "validation-notes");
+    notes.type = "text";
+    notes.maxLength = 500;
+    notes.placeholder = "Environment, dataset, result, or failure reason";
+    notes.value = record.notes || "";
+    notes.setAttribute("aria-label", `Validation notes for ${query.name}`);
+    notes.addEventListener("change", () => {
+      const next = state.queryValidation[key] || { status: "untested", testedAt: "" };
+      next.notes = notes.value.trim().slice(0, 500);
+      state.queryValidation[key] = next;
+      savePreferences();
+    });
+    const tested = make("small", "validation-date", record.testedAt ? `Recorded ${record.testedAt.slice(0, 10)}` : "No local test recorded");
+    section.append(heading, controls, notes, tested);
+    parent.append(section);
   }
 
   function navigateTableOfContents(event) {
@@ -1373,7 +1880,7 @@
   }
 
   function syncModalState() {
-    document.body.classList.toggle("modal-open", ui.panel.open || ui["command-palette"].open);
+    document.body.classList.toggle("modal-open", ui.panel.open || ui["command-palette"].open || ui["environment-dialog"].open || ui["investigation-dialog"].open);
   }
 
   function panelCandidates() {
@@ -1548,6 +2055,10 @@
   }
 
   const COMMANDS = [
+    { id: "investigation", label: "Open investigation workspace", keywords: "case alert triage evidence", run: openInvestigation },
+    { id: "environment", label: "Configure environment profile", keywords: "telemetry sources coverage", run: openEnvironment },
+    { id: "guided", label: "Use guided analyst mode", keywords: "beginner explanation detail", run: () => setAnalystMode("guided") },
+    { id: "expert", label: "Use expert analyst mode", keywords: "compact advanced", run: () => setAnalystMode("expert") },
     { id: "view-dashboard", label: "Open coverage dashboard", keywords: "coverage quality metrics", run: () => setView("dashboard") },
     { id: "view-matrix", label: "Open ATT&CK matrix", keywords: "tactics techniques", run: () => setView("matrix") },
     { id: "view-table", label: "Open coverage table", keywords: "list grid", run: () => setView("table") },
@@ -1557,8 +2068,8 @@
   ];
 
   function openCommandPalette() {
-    if (ui.panel.open) {
-      toast("Close the playbook before opening the command palette");
+    if (ui.panel.open || ui["environment-dialog"].open || ui["investigation-dialog"].open) {
+      toast("Close the open workspace before opening the command palette");
       return;
     }
     ui["command-q"].value = "";
@@ -1656,7 +2167,7 @@
       openCommandPalette();
       return;
     }
-    if (event.key === "/" && !isTypingTarget(event.target) && !ui.panel.open && !ui["command-palette"].open) {
+    if (event.key === "/" && !isTypingTarget(event.target) && !ui.panel.open && !ui["command-palette"].open && !ui["environment-dialog"].open && !ui["investigation-dialog"].open) {
       event.preventDefault();
       ui.q.focus();
     }
@@ -1667,6 +2178,19 @@
       const saved = JSON.parse(localStorage.getItem(STORE) || localStorage.getItem(LEGACY_STORE) || "{}");
       if (["matrix", "list", "table", "dashboard"].includes(saved.view)) state.preferredView = saved.view;
       if (["dark", "light"].includes(saved.theme)) state.theme = saved.theme;
+      if (["guided", "expert"].includes(saved.analystMode)) state.analystMode = saved.analystMode;
+      state.environment = new Set(Array.isArray(saved.environment) ? saved.environment.filter(value => typeof value === "string").slice(0, 100) : []);
+      state.investigation = saved.investigation && typeof saved.investigation === "object" ? saved.investigation : null;
+      if (saved.queryValidation && typeof saved.queryValidation === "object") {
+        Object.entries(saved.queryValidation).slice(0, QUERY_VALIDATION_LIMIT).forEach(([key, value]) => {
+          if (!value || typeof value !== "object" || !["untested", "passed", "failed"].includes(value.status)) return;
+          state.queryValidation[String(key).slice(0, 260)] = {
+            status: value.status,
+            notes: typeof value.notes === "string" ? value.notes.slice(0, 500) : "",
+            testedAt: typeof value.testedAt === "string" ? value.testedAt.slice(0, 40) : ""
+          };
+        });
+      }
       state.favorites = new Set(Array.isArray(saved.favorites) ? saved.favorites.filter(value => typeof value === "string").slice(0, 500) : []);
       state.recent = Array.isArray(saved.recent) ? saved.recent.filter(value => typeof value === "string").slice(0, RECENT_LIMIT) : [];
     } catch { /* Storage can be unavailable or contain invalid data; use bounded defaults. */ }
@@ -1677,6 +2201,10 @@
       localStorage.setItem(STORE, JSON.stringify({
         view: state.preferredView,
         theme: state.theme,
+        analystMode: state.analystMode,
+        environment: [...state.environment].slice(0, 100),
+        investigation: state.investigation,
+        queryValidation: Object.fromEntries(Object.entries(state.queryValidation).slice(0, QUERY_VALIDATION_LIMIT)),
         favorites: [...state.favorites].slice(0, 500),
         recent: state.recent.slice(0, RECENT_LIMIT)
       }));
@@ -1685,6 +2213,7 @@
 
   function applyAppearance() {
     document.documentElement.dataset.theme = state.theme;
+    document.documentElement.dataset.analystMode = state.analystMode;
     const light = state.theme === "light";
     ui.theme?.setAttribute("aria-label", light ? "Use dark theme" : "Use light theme");
     const themeColor = document.querySelector('meta[name="theme-color"]');
