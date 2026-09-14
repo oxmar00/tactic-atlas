@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Offline investigation workspace
+
+- Added a local investigation workspace with bounded alert intake, explicit match reasons, analyst-confirmed playbook scope, entity capture, generated triage and evidence tasks, notes, a compact evidence graph, and Markdown export.
+- Added an environment profile that calculates required-telemetry fit from sources the analyst marks available while clearly stating that availability does not prove collection health.
+- Added guided and expert presentation modes that share one evidence base and adjust explanation density.
+- Replaced the ambiguous playbook quality badge with a completeness label and added separate indicators for ATT&CK mapping verification, event-identifier provenance, query adaptation, corpus validation, review state, and local environment fit.
+- Added local per-query validation records with untested, passed, and failed states, notes, and test dates. Local results never modify corpus confidence.
+- Added pure, tested functions for alert suggestions, confidence summaries, environment fit, investigation tasks, evidence graphs, and Markdown case exports.
+- Documented the integrated direction and deliberate exclusions in `outputs/tactic-atlas-v5.md`.
+
 ## 4.5.0 — Brand mark and ATT&CK analytics data layer
 
 - Replaced the generic shield icon with a distinct TacticAtlas mark: a 4x4 ATT&CK matrix with an escalating path traced across tactic columns. Content sits inside the maskable safe zone so platform cropping cannot clip it.

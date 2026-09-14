@@ -841,8 +841,9 @@ export async function validateProject() {
   const requiredIds = [
     "q", "kind", "technique", "platform", "source", "group", "severity", "maturity", "status", "sort",
     "matrix-shell", "matrix-header-scroll", "matrix-headings", "matrix-scroll", "matrix", "list", "table", "dashboard",
-    "panel", "p-body", "p-groups", "p-stages", "p-status", "p-export-svg",
-    "result-count", "update-banner", "command-palette"
+    "panel", "p-body", "p-groups", "p-stages", "p-status", "p-export-svg", "p-confidence", "p-add-case",
+    "result-count", "update-banner", "command-palette", "start-investigation", "environment-dialog", "investigation-dialog",
+    "case-alert", "case-suggestions", "case-selected", "case-checklist", "case-graph"
   ];
   requiredIds.forEach(id => {
     if (!new RegExp(`\\bid=["']${id}["']`).test(index)) add("index.html", `missing #${id}`);

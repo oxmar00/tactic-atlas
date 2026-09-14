@@ -130,6 +130,8 @@ test("core exposes the stable dependency-free API and current tactic contract", 
     "normalizeText", "tokenizeQuery", "normalizeDataset", "buildSearchIndex", "rankPlaybook",
     "filterAndSortPlaybooks", "encodeUrlState", "decodeUrlState", "serializePlaybookMarkdown",
     "serializePlaybooksJson", "serializeCoverageCsv", "escapeCsvCell", "safeFilename",
+    "confidenceProfile", "environmentFit", "investigationSuggestions", "investigationTasks",
+    "investigationGraph", "serializeInvestigationMarkdown",
     "qualitySummary", "coverageSummary", "wrapText", "buildFlowchart", "refreshServiceWorkerRevision",
     "waitForServiceWorkerRevision"
   ]) assert.equal(typeof Core[name], "function", `${name} must remain exported`);
@@ -175,6 +177,50 @@ test("search ranking, fuzzy matching, filters, and sorting are deterministic", (
   assert.deepEqual(Core.filterAndSortPlaybooks(playbooks, { query: "powershel" }, index).map(item => item.id), ["T1059"]);
   assert.deepEqual(Core.filterAndSortPlaybooks(playbooks, { platform: "Identity" }, index).map(item => item.id), ["T1110"]);
   assert.deepEqual(Core.filterAndSortPlaybooks(playbooks, { sort: "severity" }, index).map(item => item.id), ["T1110", "T1059"]);
+});
+
+test("investigation suggestions explain matches and respect environment fit", () => {
+  const powershell = contractPlaybook();
+  powershell.telemetry_requirements[0].event_ids[0].provenance = "attack-v19.1-verified";
+  const bruteForce = contractPlaybook({
+    id: "T1110",
+    name: "Brute Force",
+    techniques: [{ id: "T1110", name: "Brute Force" }],
+    subtechniques: [],
+    search_terms: ["T1110", "password guessing", "authentication"],
+    telemetry_requirements: [{ ...powershell.telemetry_requirements[0], id: "identity", source_name: "Identity audit", event_ids: [{ id: "4625", provenance: "legacy-authored-unverified" }] }]
+  });
+  const playbooks = Core.normalizeDataset(contractDataset([powershell, bruteForce])).playbooks;
+  const index = Core.buildSearchIndex(playbooks);
+  const suggestions = Core.investigationSuggestions(playbooks, "PowerShell execution with Windows event 4688", ["endpoint-process"], index);
+  assert.equal(suggestions[0].id, "T1059");
+  assert.ok(suggestions[0].basis.some(value => value.includes("Event 4688")));
+  assert.equal(suggestions[0].environment.requiredAvailable, 1);
+  assert.equal(suggestions.some(value => value.id === "T1110"), false);
+});
+
+test("confidence, tasks, graph, and investigation export preserve evidence boundaries", () => {
+  const playbook = Core.normalizeDataset(contractDataset()).playbooks[0];
+  playbook.telemetry_requirements[0].event_ids[0].provenance = "attack-v19.1-verified";
+  const confidence = Core.confidenceProfile(playbook, Date.parse("2026-07-20T00:00:00Z"));
+  assert.deepEqual(confidence.mappings, { verified: 1, total: 1 });
+  assert.deepEqual(confidence.eventIds, { verified: 1, total: 1 });
+  assert.equal(confidence.reviewAgeDays, 8);
+  const tasks = Core.investigationTasks([playbook]);
+  assert.equal(tasks.some(item => item.type === "triage"), true);
+  assert.equal(tasks.some(item => item.type === "evidence"), true);
+  const investigation = {
+    id: "INV-1", title: "Encoded PowerShell", alert: "Event 4688", status: "active",
+    createdAt: "2026-07-20", updatedAt: "2026-07-20", entities: { host: "WS-01" },
+    completed: { [tasks[0].id]: true }, notes: "Confirm parent process."
+  };
+  const graph = Core.investigationGraph(investigation, [playbook]);
+  assert.equal(graph.nodes.some(node => node.type === "entity"), true);
+  assert.equal(graph.nodes.some(node => node.type === "playbook"), true);
+  const markdown = Core.serializeInvestigationMarkdown(investigation, [playbook], tasks);
+  assert.match(markdown, /Encoded PowerShell/);
+  assert.match(markdown, /ATT&CK-verified event IDs/);
+  assert.match(markdown, /not incident verdicts/i);
 });
 
 test("URL state round-trips bounded filters and an encoded playbook ID", () => {
