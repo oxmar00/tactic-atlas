@@ -16,9 +16,15 @@
   const SEVERITY_ORDER = Object.freeze({ critical: 5, high: 4, medium: 3, low: 2, informational: 1, unknown: 0 });
   const MAX_QUERY_LENGTH = 240;
   const MAX_FILTER_LENGTH = 160;
+  // Anchored on both ends: "legacy-authored-unverified" also ends in "verified".
+  const ATTACK_VERIFIED = /^attack-v\d+(?:\.\d+)*-verified$/i;
 
   function text(value, fallback = "") {
     return typeof value === "string" ? value.trim() : value == null ? fallback : String(value).trim();
+  }
+
+  function isAttackVerified(provenance) {
+    return ATTACK_VERIFIED.test(text(provenance));
   }
 
   function number(value, fallback = 0) {
@@ -438,9 +444,9 @@
     const mappings = Array.isArray(playbook?.tactic_mappings) ? playbook.tactic_mappings : [];
     const mappingVerified = mappings.filter(mapping => mapping?.verified === true
       || text(mapping?.status).toLowerCase() === "verified"
-      || /^attack-v[\d.]+-verified$/i.test(text(mapping?.provenance))).length;
+      || isAttackVerified(mapping?.provenance)).length;
     const identifiers = eventIdentifiers(playbook);
-    const eventVerified = identifiers.filter(reference => /^attack-v[\d.]+-verified$/i.test(reference.provenance)).length;
+    const eventVerified = identifiers.filter(reference => isAttackVerified(reference.provenance)).length;
     const queries = Array.isArray(playbook?.queries) ? playbook.queries : [];
     const adaptationRequired = queries.filter(query => query?.adaptation_required !== false).length;
     const lastReviewed = text(playbook?.lifecycle?.last_reviewed || playbook?.lifecycle?.last_validation_date);
@@ -930,7 +936,7 @@
     const telemetry = Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [];
     const required = telemetry.filter(source => text(source?.tier).toLowerCase() === "required");
     const verified = telemetry.reduce((total, source) => total
-      + (Array.isArray(source?.event_ids) ? source.event_ids.filter(id => /^attack-v\d+(?:\.\d+)*-verified$/i.test(text(id?.provenance))).length : 0), 0);
+      + (Array.isArray(source?.event_ids) ? source.event_ids.filter(id => isAttackVerified(id?.provenance)).length : 0), 0);
     return {
       hypothesis: text(playbook?.detection?.hypothesis),
       objective: text(playbook?.detection?.objective),
@@ -1059,9 +1065,175 @@
     return node.lines.reduce((total, line) => total + (line.kind === "title" ? FLOW.titleHeight : FLOW.lineHeight), 0);
   }
 
+  // Telemetry is attached to the flow by tier, at the step where an analyst actually needs it:
+  // required sources before any decision is made, recommended sources while scoping, and
+  // optional/compensating sources as the concrete answer to "unresolved evidence".
+  const TELEMETRY_STEPS = Object.freeze([
+    {
+      id: "first", node: "triage", marker: "①", label: "Check first", when: "Triage",
+      tiers: ["required"], withEvents: true,
+      empty: "No source is marked required. Confirm collection before relying on this flow."
+    },
+    {
+      id: "correlate", node: "analysis", marker: "②", label: "Correlate with", when: "Investigate and scope",
+      tiers: ["recommended"], withEvents: false,
+      empty: "No recommended sources are recorded for this technique."
+    },
+    {
+      id: "fallback", node: "evidence-gap", marker: "③", label: "Next sources", when: "If evidence is unresolved",
+      tiers: ["optional", "compensating"], withEvents: false,
+      empty: "No optional or compensating sources are recorded; extend collection before closing."
+    }
+  ]);
+
+  // Only ATT&CK-verified identifiers are promoted into the flow. Legacy identifiers carried
+  // over from the v3 content are counted but withheld: in this dataset every event reference
+  // attached to a source that cannot emit it is a legacy one, so surfacing them as "check
+  // first" actions would send analysts to the wrong log.
+  function flowchartTelemetry(playbook, { resolveEvent } = {}) {
+    const sources = (Array.isArray(playbook?.telemetry_requirements) ? playbook.telemetry_requirements : [])
+      .filter(source => source && typeof source === "object");
+    let verifiedTotal = 0;
+    let unverifiedTotal = 0;
+    const shaped = sources.map(source => {
+      const seen = new Set();
+      const events = [];
+      let unverified = 0;
+      (Array.isArray(source.event_ids) ? source.event_ids : []).forEach(raw => {
+        const reference = raw && typeof raw === "object" ? raw : { id: raw };
+        const id = text(reference.id ?? reference.event_id);
+        if (!id) return;
+        if (!isAttackVerified(reference.provenance)) {
+          unverified += 1;
+          return;
+        }
+        if (seen.has(id)) return;
+        seen.add(id);
+        const catalog = typeof resolveEvent === "function" ? resolveEvent(id, reference, source) : undefined;
+        events.push({
+          id,
+          provider: text(reference.provider || catalog?.log_source),
+          name: text(catalog?.name),
+          fields: list(catalog?.fields, 12),
+          conditional: text(catalog?.conditional)
+        });
+      });
+      verifiedTotal += events.length;
+      unverifiedTotal += unverified;
+      // Linux, macOS, cloud and EDR sources rarely have numeric event IDs; ATT&CK cites them
+      // by channel instead ("auditd:SYSCALL" / "execve"). Channels that declare EventCode are
+      // already represented above as verified events, so only the rest are kept here.
+      const channelSeen = new Set();
+      const channels = (Array.isArray(source.attack_analytics) ? source.attack_analytics : [])
+        .map(analytic => ({ logSource: text(analytic?.log_source), channel: text(analytic?.channel) }))
+        .filter(entry => entry.logSource && entry.channel && !/Event(?:Code|ID)\s*=/i.test(entry.channel))
+        .filter(entry => {
+          const key = `${entry.logSource}\u0000${entry.channel}`.toLowerCase();
+          if (channelSeen.has(key)) return false;
+          channelSeen.add(key);
+          return true;
+        });
+      return {
+        id: text(source.id),
+        name: text(source.source_name || source.source_heading || source.category || source.id),
+        tier: text(source.tier || source.priority || "recommended").toLowerCase(),
+        events,
+        channels,
+        unverified
+      };
+    });
+    // Verified events first, then sources ATT&CK cites by channel, then everything else.
+    const rank = (a, b) => b.events.length - a.events.length
+      || Number(b.channels.length > 0) - Number(a.channels.length > 0)
+      || a.name.localeCompare(b.name);
+    return {
+      steps: TELEMETRY_STEPS.map(({ tiers, ...step }) => ({
+        ...step,
+        sources: shaped.filter(source => tiers.includes(source.tier)).sort(rank)
+      })),
+      counts: { sources: shaped.length, verified: verifiedTotal, unverified: unverifiedTotal }
+    };
+  }
+
+  function telemetryEventLabel(event) {
+    return event.name ? `${event.id} ${event.name}` : event.id;
+  }
+
+  // wrapText clips any single token longer than a line. ATT&CK channels are full of those
+  // (comma-joined API names, file paths, regexes), and clipping them would alter MITRE's text.
+  // This splits an over-long token at its own separators — or hard-splits it if it has none —
+  // so rejoining the lines reproduces the input exactly, with nothing dropped or inserted.
+  function wrapExact(value, maxChars) {
+    const pieces = [];
+    text(value).replace(/\s+/g, " ").split(" ").filter(Boolean).forEach(word => {
+      if (word.length <= maxChars) {
+        pieces.push({ text: word, glued: false });
+        return;
+      }
+      (word.match(/[^,/|;:=&]*[,/|;:=&]?/g) || []).filter(Boolean).forEach((part, partIndex) => {
+        for (let start = 0; start < part.length; start += maxChars) {
+          pieces.push({ text: part.slice(start, start + maxChars), glued: partIndex > 0 || start > 0 });
+        }
+      });
+    });
+    const lines = [];
+    let current = "";
+    pieces.forEach(piece => {
+      const candidate = current ? `${current}${piece.glued ? "" : " "}${piece.text}` : piece.text;
+      if (candidate.length <= maxChars) {
+        current = candidate;
+        return;
+      }
+      if (current) lines.push(current);
+      current = piece.text;
+    });
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  // Compact enough to sit inside a flowchart card; the full per-event detail is rendered
+  // beside the diagram rather than squeezed into SVG text. Counts are capped instead of text,
+  // so every line wraps in full: a label is never silently truncated with an ellipsis.
+  function telemetryFlowLines(step, maxChars, shownSources = 3) {
+    const lines = [{ kind: "telemetry-head", text: `${step.marker} ${step.label}` }];
+    if (!step.sources.length) {
+      wrapExact(step.empty, maxChars).forEach(line => lines.push({ kind: "telemetry-more", text: line }));
+      return lines;
+    }
+    const shown = step.sources.slice(0, shownSources);
+    shown.forEach(source => {
+      wrapExact(`• ${source.name}`, maxChars).forEach(line => lines.push({ kind: "telemetry", text: line }));
+      // Indented lines lose 12px of width, so they wrap two characters earlier.
+      const detail = value => wrapExact(value, maxChars - 2)
+        .forEach(line => lines.push({ kind: "telemetry-event", text: line, indent: 12 }));
+      if (step.withEvents && source.events.length) {
+        const events = source.events.slice(0, 3).map(telemetryEventLabel).join(" · ");
+        detail(`${events}${source.events.length > 3 ? ` +${source.events.length - 3}` : ""}`);
+      } else if (step.withEvents && source.channels.length) {
+        const [first] = source.channels;
+        detail(`${first.logSource} · ${first.channel}${source.channels.length > 1 ? ` +${source.channels.length - 1}` : ""}`);
+      }
+    });
+    if (step.sources.length > shown.length) {
+      lines.push({ kind: "telemetry-more", text: `+${step.sources.length - shown.length} more in the telemetry map` });
+    }
+    return lines;
+  }
+
+  function telemetrySummary(plan) {
+    const evidence = source => source.events.length
+      ? ` [${source.events.map(event => event.id).join(", ")}]`
+      : source.channels.length ? ` [${source.channels.map(entry => `${entry.logSource} ${entry.channel}`).join(", ")}]` : "";
+    return plan.steps.map(step => `${step.label} (${step.when}): ${step.sources.length
+      ? step.sources.map(source => source.name + evidence(source)).join("; ")
+      : "none recorded"}.`).join(" ");
+  }
+
   // Explicit workflow edges keep evidence gaps, failed actions, and accepted closure distinct.
-  function buildOperationalFlowchart(playbook) {
+  function buildOperationalFlowchart(playbook, options = {}) {
     const workflow = playbook.response.workflow;
+    const telemetry = flowchartTelemetry(playbook, options);
+    const telemetryByNode = new Map(telemetry.steps.map(step => [step.node, step]));
     const nodes = []; const edges = []; const margin = 24; const gap = 44;
     const spineWidth = 344, branchWidth = 290, branchX = 444, centerX = margin + spineWidth / 2;
     let y = margin;
@@ -1070,9 +1242,12 @@
       const members = workflow.nodes.filter(node => node.row === row).map(source => {
         const decision = source.kind === "decision";
         const maxChars = decision ? 22 : source.column === "branch" ? 38 : 46;
+        // Diamonds taper, so telemetry is only ever attached to rectangular cards.
+        const step = decision ? undefined : telemetryByNode.get(source.id);
         const lines = [
           ...wrapText(source.title, decision ? 22 : source.column === "branch" ? 33 : 40, 100).map(text => ({ kind: "title", text })),
-          ...(source.items || []).flatMap(item => wrapText(item, maxChars, 100).map(text => ({ kind: "item", text })))
+          ...(source.items || []).flatMap(item => wrapText(item, maxChars, 100).map(text => ({ kind: "item", text }))),
+          ...(step ? telemetryFlowLines(step, maxChars) : [])
         ];
         const body = lines.reduce((sum, line) => sum + (line.kind === "title" ? FLOW.titleHeight : FLOW.lineHeight), 0);
         const padding = decision ? body / 2 + FLOW.decisionPadding : FLOW.padding;
@@ -1102,13 +1277,15 @@
       edges.push({ ...source, points, labelPoint });
     });
     return { title: text(playbook.id) + " incident response flowchart",
-      summary: "Incident response flow for " + text(playbook.id) + " " + text(playbook.name) + ". " + workflow.scope + " " + workflow.edges.map(edge => edge.from + " -- " + (edge.label || "next") + " --> " + edge.to).join(". "),
-      width: branchX + branchWidth + 48 + lane * 18, height: y - gap + margin, centerX, nodes, edges,
+      summary: "Incident response flow for " + text(playbook.id) + " " + text(playbook.name) + ". " + workflow.scope + " " + workflow.edges.map(edge => edge.from + " -- " + (edge.label || "next") + " --> " + edge.to).join(". ") + ". Telemetry: " + telemetrySummary(telemetry),
+      width: branchX + branchWidth + 48 + lane * 18, height: y - gap + margin, centerX, nodes, edges, telemetry,
       metrics: { padding: FLOW.padding, lineHeight: FLOW.lineHeight, titleHeight: FLOW.titleHeight, decisionPadding: FLOW.decisionPadding }
     };
   }
-  function buildFlowchart(playbook) {
-    if (playbook?.response?.workflow?.version === 1) return buildOperationalFlowchart(playbook);
+  function buildFlowchart(playbook, options = {}) {
+    if (playbook?.response?.workflow?.version === 1) return buildOperationalFlowchart(playbook, options);
+    const telemetry = flowchartTelemetry(playbook, options);
+    const telemetryByNode = new Map(telemetry.steps.map(step => [step.node, step]));
     const response = playbook?.response || {};
     const tree = (Array.isArray(response.decision_tree) ? response.decision_tree : []).filter(node => node && typeof node === "object");
     const centerX = FLOW.marginX + FLOW.spineWidth / 2;
@@ -1184,10 +1361,12 @@
 
       const count = flowCount(stage.source);
       const steps = flowSteps(stage.source, 3);
+      const telemetryStep = telemetryByNode.get(stage.id);
       const stageNode = addSpine(stage.id, "phase", [
         ...entryLines,
         { kind: "title", text: count ? `${stage.title} · ${count} step${count === 1 ? "" : "s"}` : stage.title },
-        ...steps.flatMap(step => wrapText(`• ${step}`, FLOW.itemChars, 2).map(line => ({ kind: "item", text: line })))
+        ...steps.flatMap(step => wrapText(`• ${step}`, FLOW.itemChars, 2).map(line => ({ kind: "item", text: line }))),
+        ...(telemetryStep ? telemetryFlowLines(telemetryStep, FLOW.itemChars) : [])
       ], { edgeLabel });
 
       if (stage.id === "triage") {
@@ -1215,12 +1394,13 @@
       `Incident response flow for ${text(playbook?.id)} ${text(playbook?.name)}.`,
       `Alert triage leads through ${tree.length} decision gate${tree.length === 1 ? "" : "s"}:`,
       ...tree.map((node, index) => `Gate ${index + 1}: ${text(node.condition)} If yes, ${text(node.if_true)} If no, ${text(node.if_false)}`),
-      `Phases: ${stages.map(stage => stage.title).join(", ")}, then closure.`
+      `Phases: ${stages.map(stage => stage.title).join(", ")}, then closure.`,
+      `Telemetry: ${telemetrySummary(telemetry)}`
     ].join(" ");
 
     return {
       title: `${text(playbook?.id)} incident response flowchart`,
-      summary, width, height, centerX, nodes, edges,
+      summary, width, height, centerX, nodes, edges, telemetry,
       metrics: {
         padding: FLOW.padding, lineHeight: FLOW.lineHeight,
         titleHeight: FLOW.titleHeight, decisionPadding: FLOW.decisionPadding
@@ -1341,6 +1521,8 @@
     stageForSection,
     playbookBrief,
     huntWorkflow,
+    isAttackVerified,
+    flowchartTelemetry,
     normalizeText,
     tokenizeQuery,
     wrapText,

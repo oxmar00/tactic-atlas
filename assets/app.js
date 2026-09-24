@@ -1421,7 +1421,7 @@
       { id: "structured-validation", stage: "validate", title: "Validation procedure", order: 104, blocks: [{ type: "structured", value: playbook.validation }] },
       { id: "response-flowchart", stage: "respond", title: "Incident response flowchart", order: 104.5, blocks: [
         { type: "paragraph", text: playbook.response.workflow?.scope || "Legacy response overview. Read the full procedures and record unresolved evidence before choosing a disposition." },
-        { type: "flowchart", value: Core.buildFlowchart(playbook) }
+        { type: "flowchart", value: Core.buildFlowchart(playbook, flowchartOptions()) }
       ] },
       { id: "research-sources", stage: "reference", title: "Response sources and applicability", order: 105.5, blocks: [{ type: "structured", value: playbook.response.source_review }, { type: "references", items: playbook.references }] },
       { id: "structured-response", stage: "respond", title: "Response — full procedures", order: 105, blocks: [{ type: "structured", value: Object.fromEntries(Object.entries(playbook.response).filter(([key]) => key !== "workflow")) }] },
@@ -1609,7 +1609,7 @@
       const step = isTitle ? metrics.titleHeight : metrics.lineHeight;
       const tspan = svgEl("tspan", {
         class: `flow-line flow-line-${line.kind}`,
-        x: centered ? node.x + node.w / 2 : node.x + 14,
+        x: centered ? node.x + node.w / 2 : node.x + 14 + (line.indent || 0),
         y: offset + step * 0.74
       });
       tspan.textContent = line.text;
@@ -1683,9 +1683,111 @@
     legend.append(
       make("span", "flow-key flow-key-decision", "Decision gate"),
       make("span", "flow-key flow-key-phase", "Response phase"),
-      make("span", "flow-key flow-key-branch", "\"No\" outcome")
+      make("span", "flow-key flow-key-branch", "\"No\" outcome"),
+      make("span", "flow-key flow-key-telemetry", "Telemetry to check")
     );
     parent.append(legend);
+    renderFlowchartTelemetry(parent, model.telemetry);
+  }
+
+  // The catalog lives in app state, so it is injected rather than imported into the pure core.
+  function flowchartOptions() {
+    return { resolveEvent: (eventId, reference, source) => eventCatalogMatch(eventId, reference, source) };
+  }
+
+  function renderFlowchartTelemetry(parent, plan) {
+    if (!plan || !Array.isArray(plan.steps) || !plan.counts?.sources) return;
+    const section = make("section", "flow-telemetry");
+    section.setAttribute("aria-label", "Telemetry for this response flow");
+    const head = make("div", "flow-telemetry-head");
+    const withheld = plan.counts.unverified
+      ? ` · ${plan.counts.unverified} unverified legacy ID${plan.counts.unverified === 1 ? "" : "s"} withheld`
+      : "";
+    head.append(
+      make("h4", null, "Telemetry map"),
+      make("p", "metric-note", `${plan.counts.sources} sources · ${plan.counts.verified} ATT&CK-verified event ID${plan.counts.verified === 1 ? "" : "s"}${withheld}. Numbers match the markers in the flowchart.`)
+    );
+    section.append(head);
+
+    plan.steps.forEach(step => {
+      const group = make("div", `flow-telemetry-step flow-telemetry-${step.id}`);
+      const title = make("h5");
+      title.append(make("span", "flow-telemetry-marker", step.marker), document.createTextNode(` ${step.label}`), make("span", "flow-telemetry-when", step.when));
+      group.append(title);
+      if (!step.sources.length) {
+        group.append(make("p", "metric-note", step.empty));
+        section.append(group);
+        return;
+      }
+      const sources = make("ul", "flow-telemetry-sources");
+      step.sources.forEach(source => sources.append(renderFlowchartTelemetrySource(source, step.withEvents)));
+      group.append(sources);
+      section.append(group);
+    });
+
+    const more = make("button", "flow-telemetry-link", "Open full telemetry requirements");
+    more.type = "button";
+    more.addEventListener("click", openTelemetryRequirements);
+    section.append(more);
+    parent.append(section);
+  }
+
+  function renderFlowchartTelemetrySource(source, withFields) {
+    const item = make("li", "flow-telemetry-source");
+    const head = make("div", "flow-telemetry-source-head");
+    head.append(make("strong", null, source.name), make("span", `pill tier-${Core.slugify(source.tier)}`, source.tier));
+    item.append(head);
+
+    if (source.events.length) {
+      const chips = make("div", "flow-telemetry-events");
+      source.events.forEach(event => {
+        const chip = make("span", "event-chip");
+        chip.append(make("code", null, event.id));
+        if (event.name) chip.append(make("span", null, event.name));
+        if (event.provider) chip.title = event.provider;
+        chips.append(chip);
+      });
+      item.append(chips);
+      // Field guidance only where it drives the first decision; later steps stay scannable.
+      if (withFields) {
+        source.events.filter(event => event.fields.length).slice(0, 3).forEach(event => {
+          const fields = make("p", "flow-telemetry-fields");
+          fields.append(make("code", null, event.id), document.createTextNode(` inspect ${event.fields.slice(0, 6).join(", ")}`));
+          item.append(fields);
+        });
+        const policy = source.events.find(event => event.conditional)?.conditional;
+        if (policy) item.append(make("p", "flow-telemetry-policy", policy));
+      }
+    }
+    if (!source.events.length && source.channels.length) {
+      const cited = make("div", "flow-telemetry-events");
+      cited.append(make("span", "flow-telemetry-cited", "ATT&CK cites"));
+      source.channels.slice(0, 4).forEach(entry => {
+        const chip = make("span", "channel-chip");
+        chip.append(make("code", null, entry.logSource), make("span", null, entry.channel));
+        cited.append(chip);
+      });
+      if (source.channels.length > 4) cited.append(make("span", "flow-telemetry-cited", `+${source.channels.length - 4} more`));
+      item.append(cited);
+    }
+    if (!source.events.length && !source.channels.length) {
+      item.append(make("p", "flow-telemetry-none", "No ATT&CK-verified event ID or channel recorded for this source."));
+    }
+    if (source.unverified) {
+      item.append(make("p", "flow-telemetry-caveat",
+        `${source.unverified} legacy identifier${source.unverified === 1 ? "" : "s"} not confirmed against ATT&CK — withheld.`));
+    }
+    return item;
+  }
+
+  function openTelemetryRequirements() {
+    setStage("detect");
+    const target = [...ui["p-body"].querySelectorAll("details")].find(details => details.id.endsWith("structured-telemetry"));
+    if (!target) return;
+    target.open = true;
+    lazySections.get(target)?.();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.querySelector("summary")?.focus({ preventScroll: true });
   }
 
   function renderTelemetry(parent, sources) {
@@ -2025,6 +2127,10 @@
       `.flow-line-title{font-weight:700;font-size:12px}`,
       `.flow-line-item{fill:${token("muted")};font-size:11px}`,
       `.flow-line-entry{fill:${token("accent-2")};font-size:10.5px;font-style:italic}`,
+      `.flow-line-telemetry-head{fill:${token("info")};font-weight:700;font-size:11px}`,
+      `.flow-line-telemetry{fill:${token("text")};font-size:11px}`,
+      `.flow-line-telemetry-event{fill:${token("info")};font-size:10.5px;font-family:${token("mono") || "monospace"}}`,
+      `.flow-line-telemetry-more{fill:${token("dim")};font-size:10.5px;font-style:italic}`,
       `.flow-edge{fill:none;stroke:${token("dim")};stroke-width:1.6}`,
       `.flow-edge-branch{stroke:${token("danger")};stroke-dasharray:5 4}`,
       `.flow-arrow{fill:${token("dim")}}`,
@@ -2039,7 +2145,7 @@
     if (!playbook) return;
     const computed = getComputedStyle(document.documentElement);
     const token = name => computed.getPropertyValue(`--${name}`).trim() || "#000000";
-    const model = Core.buildFlowchart(playbook);
+    const model = Core.buildFlowchart(playbook, flowchartOptions());
     const svg = buildFlowchartSvg(model);
     svg.setAttribute("xmlns", SVG_NS);
     svg.setAttribute("font-family", token("sans") || "sans-serif");

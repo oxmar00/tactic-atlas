@@ -814,6 +814,128 @@ test("every library workflow has explicit outcomes, reachable closure and failur
  }
 });
 
+test("ATT&CK provenance is matched exactly, so 'unverified' never counts as verified", () => {
+  assert.equal(Core.isAttackVerified("attack-v19.1-verified"), true);
+  assert.equal(Core.isAttackVerified("attack-v19-verified"), true);
+  assert.equal(Core.isAttackVerified("legacy-authored-unverified"), false);
+  assert.equal(Core.isAttackVerified("unverified"), false);
+  assert.equal(Core.isAttackVerified(undefined), false);
+});
+
+test("flowchart telemetry buckets sources by tier and withholds unverified identifiers", () => {
+  const playbook = {
+    telemetry_requirements: [
+      { id: "ids", source_name: "IDS/IPS telemetry", tier: "recommended",
+        event_ids: [{ provider: "Windows Event Log - PowerShell", id: "4103", provenance: "legacy-authored-unverified" }] },
+      { id: "sec", source_name: "Windows Security", tier: "required",
+        event_ids: [
+          { provider: "Windows Security", id: "4688", provenance: "attack-v19.1-verified" },
+          { provider: "Windows Security", id: "4688", provenance: "attack-v19.1-verified" },
+          { provider: "Legacy", id: "4104", provenance: "legacy-authored-unverified" }
+        ] },
+      { id: "sysmon", source_name: "Microsoft Sysmon", tier: "recommended",
+        event_ids: [{ provider: "Sysmon", id: "1", provenance: "attack-v19.1-verified" }] },
+      { id: "edr", source_name: "EDR/XDR telemetry", tier: "optional", event_ids: [] },
+      { id: "linux", source_name: "Linux audit", tier: "recommended", event_ids: [],
+        attack_analytics: [
+          { log_source: "auditd:SYSCALL", channel: "execve" },
+          { log_source: "auditd:SYSCALL", channel: "execve" },
+          { log_source: "WinEventLog:Sysmon", channel: "EventCode=1" }
+        ] }
+    ]
+  };
+  const resolved = [];
+  const plan = Core.flowchartTelemetry(playbook, {
+    resolveEvent: (id, reference, source) => {
+      resolved.push(id);
+      return id === "4688" ? { name: "Process Creation", fields: ["CommandLine", "ParentProcessName"] } : undefined;
+    }
+  });
+  const step = Object.fromEntries(plan.steps.map(entry => [entry.id, entry]));
+  assert.deepEqual(plan.steps.map(entry => entry.node), ["triage", "analysis", "evidence-gap"]);
+  assert.deepEqual(step.first.sources.map(source => source.id), ["sec"]);
+  assert.deepEqual(step.first.sources[0].events, [
+    { id: "4688", provider: "Windows Security", name: "Process Creation", fields: ["CommandLine", "ParentProcessName"], conditional: "" }
+  ], "duplicates collapse and the legacy 4104 is withheld");
+  assert.equal(step.first.sources[0].unverified, 1);
+  assert.deepEqual(step.correlate.sources.map(source => source.id), ["sysmon", "linux", "ids"],
+    "verified events rank first, then ATT&CK-cited channels, then uncited sources");
+  assert.deepEqual(step.correlate.sources[2].events, [], "a legacy-only source promotes no event");
+  assert.deepEqual(step.correlate.sources[1].channels, [{ logSource: "auditd:SYSCALL", channel: "execve" }],
+    "channels are de-duplicated and EventCode channels are left to the event list");
+  assert.deepEqual(step.fallback.sources.map(source => source.id), ["edr"]);
+  assert.deepEqual(plan.counts, { sources: 5, verified: 2, unverified: 2 });
+  assert.deepEqual(resolved, ["4688", "1"], "unverified identifiers are never resolved against the catalog");
+
+  const empty = Core.flowchartTelemetry({});
+  assert.deepEqual(empty.counts, { sources: 0, verified: 0, unverified: 0 });
+  assert.ok(empty.steps.every(entry => entry.sources.length === 0));
+});
+
+test("over-long ATT&CK channel tokens wrap without losing or inventing a character", () => {
+  const channel = "AssumeRole,AssumeRoleWithSAML,AssumeRoleWithWebIdentity";
+  const regex = ".*from=[.*@internaldomain.com](mailto:.*@internaldomain.com)";
+  for (const value of [channel, regex, "x".repeat(130)]) {
+    const model = Core.buildFlowchart({
+      id: "T0000", name: "Fixture", response: {},
+      telemetry_requirements: [{ id: "cloud", source_name: "Cloud audit", tier: "required", event_ids: [],
+        attack_analytics: [{ log_source: "AWS:CloudTrail", channel: value }] }]
+    });
+    const lines = model.nodes.find(node => node.id === "triage").lines.filter(line => line.kind === "telemetry-event");
+    assert.ok(lines.length > 1, "the token actually wraps");
+    assert.ok(lines.every(line => !line.text.includes("…")), "nothing is clipped");
+    const width = 52 - 2; // FLOW.itemChars less the event-line indent
+    assert.ok(lines.every(line => line.text.length <= width), "every line fits its card");
+    assert.equal(lines.map(line => line.text).join("").replace(/\s/g, ""), `AWS:CloudTrail·${value}`.replace(/\s/g, ""),
+      "rejoined lines reproduce the ATT&CK text exactly");
+  }
+});
+
+test("every library flowchart carries tiered telemetry on the right cards and never on decisions", async () => {
+  const data = JSON.parse(await readFile(new URL("../data/playbooks.json", import.meta.url), "utf8"));
+  for (const playbook of data.playbooks) {
+    const model = Core.buildFlowchart(playbook);
+    const byId = new Map(model.nodes.map(node => [node.id, node]));
+    const heads = id => byId.get(id).lines.filter(line => line.kind === "telemetry-head").map(line => line.text);
+    assert.deepEqual(heads("triage"), ["① Check first"], playbook.id);
+    assert.deepEqual(heads("analysis"), ["② Correlate with"], playbook.id);
+    assert.deepEqual(heads("evidence-gap"), ["③ Next sources"], playbook.id);
+    assert.ok(model.nodes.filter(node => node.kind === "decision")
+      .every(node => !node.lines.some(line => line.kind.startsWith("telemetry"))), `${playbook.id}: diamonds stay text-only`);
+    assert.equal(model.telemetry.counts.sources, playbook.telemetry_requirements.length, playbook.id);
+    // Anything the diagram presents as an event to check must be ATT&CK-verified on that source.
+    const verified = new Set(playbook.telemetry_requirements.flatMap(source => (source.event_ids || [])
+      .filter(reference => Core.isAttackVerified(reference.provenance)).map(reference => `${source.id}:${reference.id}`)));
+    model.telemetry.steps.flatMap(step => step.sources).forEach(source => source.events
+      .forEach(event => assert.ok(verified.has(`${source.id}:${event.id}`), `${playbook.id} ${source.id}:${event.id}`)));
+    // Likewise every channel shown must be one ATT&CK cites on that same source.
+    const cited = new Set(playbook.telemetry_requirements.flatMap(source => (source.attack_analytics || [])
+      .map(analytic => `${source.id}:${analytic.log_source}:${analytic.channel}`)));
+    model.telemetry.steps.flatMap(step => step.sources).forEach(source => source.channels
+      .forEach(entry => assert.ok(cited.has(`${source.id}:${entry.logSource}:${entry.channel}`), `${playbook.id} ${source.id} channel`)));
+  }
+});
+
+test("catalog-named telemetry keeps every flowchart untruncated and collision-free", async () => {
+  const data = JSON.parse(await readFile(new URL("../data/playbooks.json", import.meta.url), "utf8"));
+  const catalog = JSON.parse(await readFile(new URL("../data/event-catalog.json", import.meta.url), "utf8"));
+  const byId = new Map();
+  for (const event of catalog.events) byId.set(event.event_id, [...(byId.get(event.event_id) || []), event]);
+  // The longest candidate name is the worst case for wrapping.
+  const resolveEvent = id => (byId.get(id) || []).reduce((longest, event) => (!longest || event.name.length > longest.name.length ? event : longest), undefined);
+  let named = 0;
+  for (const playbook of data.playbooks) {
+    const model = Core.buildFlowchart(playbook, { resolveEvent });
+    named += model.nodes.flatMap(node => node.lines).filter(line => line.kind === "telemetry-event" && /\d+ [A-Z]/.test(line.text)).length;
+    assert.ok(!model.nodes.some(node => node.lines.some(line => line.text.includes("…"))), `${playbook.id}: no truncated labels`);
+    const overlaps = model.nodes.flatMap((a, i) => model.nodes.slice(i + 1)
+      .filter(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h));
+    assert.equal(overlaps.length, 0, playbook.id);
+    model.nodes.forEach(node => assert.ok(node.x + node.w <= model.width && node.y + node.h <= model.height, `${playbook.id}: on canvas`));
+  }
+  assert.ok(named > 0, "the named-event path is actually exercised");
+});
+
 test("workflow validation rejects missing, ambiguous, unreachable and nonterminating paths", async () => {
  const { validateWorkflow } = await import("../scripts/validate-workflow.mjs");
  const data=JSON.parse(await readFile(new URL("../data/playbooks.json",import.meta.url),"utf8"));

@@ -528,6 +528,44 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
 .flow-key-decision { color: var(--accent); }
 .flow-key-phase { color: var(--muted); }
 .flow-key-branch { color: var(--danger); }
+.flow-key-telemetry { color: var(--info); }
+
+/* Telemetry inside flowchart cards: one colour family (--info) so it never reads as the
+   italic "if yes" entry text or a decision. */
+.flow-line-telemetry-head { fill: var(--info); font-weight: 700; font-size: 11px; }
+.flow-line-telemetry { fill: var(--text); font-size: 11px; }
+.flow-line-telemetry-event { fill: var(--info); font-family: var(--mono); font-size: 10.5px; }
+.flow-line-telemetry-more { fill: var(--dim); font-size: 10.5px; font-style: italic; }
+
+/* Telemetry map: the per-event detail that does not fit in SVG text, keyed to the
+   ①②③ markers in the diagram. */
+.flow-telemetry { margin: 0 0 .8rem; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--info) 35%, var(--border)); border-radius: .6rem; background: color-mix(in srgb, var(--info) 5%, var(--surface)); }
+.flow-telemetry-head h4 { margin: 0; color: var(--text); font-size: .88rem; }
+.flow-telemetry-head .metric-note { margin: .15rem 0 .5rem; }
+.flow-telemetry-step + .flow-telemetry-step { margin-top: .65rem; padding-top: .6rem; border-top: 1px solid var(--border-soft); }
+.flow-telemetry-step h5 { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem; margin: 0 0 .4rem; color: var(--text); font-size: .8rem; }
+.flow-telemetry-marker { color: var(--info); font-size: .95rem; line-height: 1; }
+.flow-telemetry-when { color: var(--dim); font: .64rem var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+.flow-telemetry-sources { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.flow-telemetry-source { padding: .45rem .55rem; border: 1px solid var(--border-soft); border-radius: .45rem; background: var(--surface); }
+.flow-telemetry-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.flow-telemetry-source-head strong { font-size: .76rem; }
+.pill.tier-required { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); color: var(--danger); }
+.pill.tier-recommended { border-color: color-mix(in srgb, var(--info) 55%, var(--border)); color: var(--info); }
+.flow-telemetry-events { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+.event-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .12rem .45rem; border: 1px solid color-mix(in srgb, var(--info) 40%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--info) 8%, var(--surface)); color: var(--muted); font-size: .68rem; }
+.event-chip code { color: var(--info); font: 700 .68rem var(--mono); }
+.channel-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem; max-width: 100%; padding: .12rem .45rem; border: 1px dashed color-mix(in srgb, var(--info) 45%, var(--border)); border-radius: .4rem; color: var(--muted); font-size: .68rem; overflow-wrap: anywhere; }
+.channel-chip code { color: var(--info); font: 700 .66rem var(--mono); }
+.flow-telemetry-cited { color: var(--dim); font: .62rem var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+.flow-telemetry-fields, .flow-telemetry-policy, .flow-telemetry-caveat, .flow-telemetry-none { margin: .3rem 0 0; font-size: .7rem; line-height: 1.45; }
+.flow-telemetry-fields { color: var(--muted); }
+.flow-telemetry-fields code { margin-right: .15rem; color: var(--info); font: 700 .68rem var(--mono); }
+.flow-telemetry-policy { color: var(--warning); }
+.flow-telemetry-caveat, .flow-telemetry-none { color: var(--dim); font-style: italic; }
+.flow-telemetry-link { margin-top: .7rem; min-height: 2.1rem; padding: .3rem .7rem; border: 1px solid var(--border); border-radius: .4rem; background: var(--surface-2); color: var(--link); font: .72rem var(--mono); cursor: pointer; }
+.flow-telemetry-link:hover { border-color: var(--info); }
+.flow-telemetry-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .threat-group-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .4rem; }
 .threat-group-tags:empty { display: none; }
 .threat-group-label { margin-right: .15rem; color: var(--dim); font: .65rem var(--mono); }
@@ -804,7 +842,9 @@ footer { padding: 1.25rem max(1rem, env(safe-area-inset-right)) calc(1.25rem + e
   .flow-shape-phase, .flow-shape-start, .flow-shape-end { fill: #fff; stroke: #444; }
   .flow-shape-decision { fill: #f2f2f2; stroke: #000; }
   .flow-shape-branch, .flow-shape-escalation { fill: #fff; stroke: #666; }
-  .flow-text, .flow-line-title, .flow-line-item, .flow-line-entry { fill: #000; }
+  .flow-text, .flow-line-title, .flow-line-item, .flow-line-entry, .flow-line-telemetry, .flow-line-telemetry-head, .flow-line-telemetry-event, .flow-line-telemetry-more { fill: #000; }
+  .flow-telemetry, .flow-telemetry-source, .event-chip, .channel-chip { border-color: #999; background: #fff; color: #000; }
+  .flow-telemetry-link { display: none; }
   .flow-edge { stroke: #444; }
   .flow-arrow { fill: #444; }
   .flow-edge-label, .flow-edge-label-yes, .flow-edge-label-no { fill: #000; }
