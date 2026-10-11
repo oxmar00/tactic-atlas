@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            soc-navigator/package-lock.json
 
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
@@ -45,6 +48,34 @@ jobs:
       - name: Audit dependency vulnerabilities
         run: npm audit --audit-level=high
 
+      - name: "SOC Navigator: install locked dependencies"
+        working-directory: soc-navigator
+        run: npm ci --ignore-scripts
+
+      - name: "SOC Navigator: typecheck and unit tests"
+        working-directory: soc-navigator
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: "SOC Navigator: verify bundled ATT&CK snapshot"
+        working-directory: soc-navigator
+        run: npm run attack:verify
+
+      - name: "SOC Navigator: build"
+        working-directory: soc-navigator
+        run: npm run build
+
+      - name: "SOC Navigator: end-to-end tests"
+        working-directory: soc-navigator
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: "SOC Navigator: audit dependency vulnerabilities"
+        working-directory: soc-navigator
+        run: npm audit --audit-level=high
+
       - name: Stage runtime site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
@@ -52,6 +83,7 @@ jobs:
           cp index.html standalone.html manifest.webmanifest service-worker.js README.md LICENSE .nojekyll _site/
           cp assets/app.js assets/core.js assets/style.css assets/icon.svg _site/assets/
           cp data/playbooks.json data/playbooks.schema.json data/event-catalog.json data/attack-analytics.json data/revision.json _site/data/
+          cp -r soc-navigator/dist _site/soc-navigator
 
       - name: Upload verified site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
