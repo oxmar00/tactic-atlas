@@ -20,7 +20,7 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",
-  "frame-ancestors 'none'",
+  // frame-ancestors is ignored in <meta>; send it (and X-Content-Type-Options etc.) as HTTP headers - see docs/PRODUCTION.md.
 ].join('; ');
 
 function cspPlugin(): Plugin {
@@ -43,6 +43,21 @@ export default defineConfig({
   build: {
     sourcemap: false,
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Third-party packages ship comment annotations Rollup cannot place; harmless noise.
+        if (warning.code === 'INVALID_ANNOTATION' && warning.id?.includes('node_modules')) return;
+        warn(warning);
+      },
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return id.includes('/src/data/playbooks/') ? 'playbooks' : undefined;
+          if (/recharts|d3-|victory|decimal\.js|es-toolkit|immer|reselect|redux/.test(id)) return 'charts';
+          if (/react|scheduler/.test(id)) return 'react';
+          return 'vendor';
+        },
+      },
+    },
   },
   test: {
     environment: 'node',

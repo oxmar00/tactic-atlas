@@ -4,6 +4,10 @@ TacticAtlas is a static, offline-capable detection engineering, threat-hunting, 
 
 Version 4 replaces executable content markup with a versioned JSON model. The browser constructs every playbook with DOM APIs and text nodes; legacy HTML is converted during migration and is not rendered at runtime.
 
+## SOC Navigator (Tier 1 investigation guide)
+
+The [`soc-navigator/`](soc-navigator/README.md) directory contains **SOC Navigator**, a React + TypeScript application built on the official MITRE ATT&CK Enterprise v19.2 STIX data. It provides an interactive Enterprise matrix, 15 technique-specific Tier 1 investigation playbooks (AI-assisted Drafts pending review), an investigation workspace with decision trees and evidence checklists, KQL/SPL query templates, and Tier 2 handoff reports. It is built, tested, and published by the same workflow at `/soc-navigator/`. See its README for setup, ATT&CK refresh, and production requirements.
+
 ## Capabilities
 
 - ATT&CK matrix, compact list, sortable table, and source-backed coverage dashboard views.
