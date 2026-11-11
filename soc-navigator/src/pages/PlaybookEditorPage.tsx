@@ -169,6 +169,33 @@ export function PlaybookEditorPage() {
               </div>
             </Card>
             <QueriesEditor draft={draft} set={set} />
+            <Card title={`Sigma rule companions (${draft.sigmaRules?.length ?? 0})`}>
+              <p className="mb-2 text-xs text-muted">Optional detection rules in Sigma YAML for detection engineers. Stored and exported as text; SOC Navigator does not validate or deploy them.</p>
+              <RowList
+                items={draft.sigmaRules ?? []}
+                onChange={(v) => set('sigmaRules', v)}
+                make={() => ({ id: `sigma-${(draft.sigmaRules?.length ?? 0) + 1}`, title: 'New Sigma rule', description: 'What the rule detects.', rule: 'title: New rule\nstatus: experimental\nlogsource:\n    category: process_creation\n    product: windows\ndetection:\n    selection:\n        Image|endswith: \'\\example.exe\'\n    condition: selection\nlevel: medium\n' })}
+                render={(r, upd, i) => (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Field label="Rule ID" htmlFor={`sg-id-${i}`}>
+                      <input id={`sg-id-${i}`} className="input font-mono" value={r.id} maxLength={48} onChange={(e) => upd({ ...r, id: e.target.value.toLowerCase() })} />
+                    </Field>
+                    <Field label="Title" htmlFor={`sg-t-${i}`}>
+                      <input id={`sg-t-${i}`} className="input" value={r.title} maxLength={200} onChange={(e) => upd({ ...r, title: e.target.value })} />
+                    </Field>
+                    <div className="md:col-span-2">
+                      <TextField id={`sg-d-${i}`} label="Description" value={r.description} onChange={(v) => upd({ ...r, description: v })} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label htmlFor={`sg-r-${i}`} className="label">
+                        Rule (YAML)
+                      </label>
+                      <textarea id={`sg-r-${i}`} className="input font-mono text-xs" rows={12} maxLength={12000} value={r.rule} spellCheck={false} onChange={(e) => upd({ ...r, rule: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+              />
+            </Card>
             <Card title="Detection notes, references, and assumptions">
               <div className="grid gap-3 md:grid-cols-2">
                 <LinesField id="det" label="Detection considerations" value={draft.detectionConsiderations} onChange={(v) => set('detectionConsiderations', v)} />

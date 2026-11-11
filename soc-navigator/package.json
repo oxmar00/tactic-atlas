@@ -1,6 +1,6 @@
 {
   "name": "soc-navigator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "SOC Navigator - MITRE ATT&CK Tier 1 Investigation Guide",
@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "attack:update": "tsx scripts/update-attack.ts",
-    "attack:verify": "tsx scripts/update-attack.ts --verify-only"
+    "attack:verify": "tsx scripts/update-attack.ts --verify-only",
+    "tacticatlas:index": "tsx scripts/build-tacticatlas-index.ts",
+    "tacticatlas:check": "tsx scripts/build-tacticatlas-index.ts --check"
   },
   "engines": {
     "node": ">=20"

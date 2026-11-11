@@ -58,9 +58,11 @@ jobs:
           npm run typecheck
           npm test
 
-      - name: "SOC Navigator: verify bundled ATT&CK snapshot"
+      - name: "SOC Navigator: verify bundled ATT&CK snapshot and TacticAtlas link index"
         working-directory: soc-navigator
-        run: npm run attack:verify
+        run: |
+          npm run attack:verify
+          npm run tacticatlas:check
 
       - name: "SOC Navigator: build"
         working-directory: soc-navigator
@@ -71,6 +73,17 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+
+      # Firefox and WebKit are informational until they have a track record: a failure is
+      # reported on the run but does not block the build or the deployment.
+      - name: "SOC Navigator: end-to-end tests (Firefox, WebKit - non-blocking)"
+        working-directory: soc-navigator
+        continue-on-error: true
+        env:
+          PW_ALL_BROWSERS: "1"
+        run: |
+          npx playwright install --with-deps firefox webkit
+          npx playwright test --project=firefox --project=webkit
 
       - name: "SOC Navigator: audit dependency vulnerabilities"
         working-directory: soc-navigator

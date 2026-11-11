@@ -60,6 +60,8 @@ export const investigationSchema = z.object({
   notes: z.string().max(MAX.notes),
   reportOverride: z.string().max(100_000).nullable(),
   activity: z.array(z.object({ at: iso, text: short })).max(MAX.activity),
+  /** IDs of investigations this one was chained from or to. */
+  linked: z.array(z.string().regex(/^INV-\d{8}-[A-Z0-9]{4}$/)).max(20).optional(),
 });
 
 export type Investigation = z.infer<typeof investigationSchema>;
@@ -339,3 +341,62 @@ export function resetProgress(inv: Investigation, now = new Date()): Investigati
 }
 
 export const OUTCOME_LIST = OUTCOMES;
+
+/**
+ * Starts a follow-on investigation with another playbook, carrying over the alert reference and
+ * every recorded evidence value whose field also exists in the target playbook.
+ */
+export function chainInvestigation(
+  source: Investigation,
+  target: Playbook,
+  analyst: string,
+  now = new Date(),
+  random: () => number = Math.random,
+): { next: Investigation; source: Investigation; carried: string[] } {
+  const targetFields = new Set(target.evidence.map((e) => e.id));
+  const carried = Object.keys(source.evidence).filter((k) => targetFields.has(k) && source.evidence[k].trim());
+  let next = createInvestigation({
+    playbook: target,
+    alertRef: source.alertRef,
+    title: `${target.title} (from ${source.id})`,
+    alertSource: source.alertSource,
+    severity: source.severity,
+    analyst,
+    demo: source.demo,
+    now,
+    random,
+  });
+  next = {
+    ...next,
+    evidence: Object.fromEntries(carried.map((k) => [k, source.evidence[k]])),
+    timeline: source.timeline.map((t) => ({ ...t })),
+    linked: [source.id],
+    activity: [{ at: now.toISOString(), text: clip(`Chained from ${source.id} (${source.playbookId}); ${carried.length} evidence field(s) carried over.`, MAX.short) }, ...next.activity],
+  };
+  const updatedSource = touch({ ...source, linked: [...new Set([...(source.linked ?? []), next.id])].slice(0, 20) }, now, `Started linked investigation ${next.id} with ${target.id}.`);
+  return { next, source: updatedSource, carried };
+}
+
+export interface SlaState {
+  ageMinutes: number;
+  targetMinutes: number;
+  /** Minutes remaining (negative when breached). Null once the investigation is escalated or resolved. */
+  remainingMinutes: number | null;
+  breached: boolean;
+}
+
+/** SLA clock runs from creation until the investigation is Escalated or Resolved. */
+export function slaState(inv: Investigation, targets: Record<Severity, number>, now = new Date()): SlaState {
+  const target = targets[inv.severity];
+  const done = !isActive(inv);
+  const end = done ? Date.parse(inv.escalation.escalatedAt ?? inv.updatedAt) : now.getTime();
+  const age = Math.max(0, Math.round((end - Date.parse(inv.createdAt)) / 60_000));
+  return { ageMinutes: age, targetMinutes: target, remainingMinutes: done ? null : target - age, breached: age > target };
+}
+
+export function formatDuration(minutes: number): string {
+  const m = Math.abs(Math.round(minutes));
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.floor(m / 60)} h ${m % 60} min`;
+  return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
+}

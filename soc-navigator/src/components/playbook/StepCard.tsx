@@ -63,8 +63,8 @@ export function StepCard({
           {open ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
         </button>
       </div>
-      {open && (
-        <div id={`${checkboxId}-body`} className="space-y-3 border-t border-line px-3 py-3 text-sm">
+      {
+        <div id={`${checkboxId}-body`} className={cx('space-y-3 border-t border-line px-3 py-3 text-sm', !open && 'print-expand hidden')}>
           <Detail label="Why this matters">{step.why}</Detail>
           <div className="grid gap-3 md:grid-cols-2">
             <ListDetail label="Where to investigate" items={step.where} />
@@ -92,7 +92,7 @@ export function StepCard({
             </div>
           )}
         </div>
-      )}
+      }
     </li>
   );
 }

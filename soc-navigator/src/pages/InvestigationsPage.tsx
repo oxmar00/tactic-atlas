@@ -1,15 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Download, ListChecks, PlayCircle } from 'lucide-react';
+import { ClipboardList, Download, ListChecks, PlayCircle, Upload } from 'lucide-react';
 import { InvestigationStatusBadge, SeverityBadge } from '../components/badges';
 import { StartInvestigationDialog } from '../components/StartInvestigationDialog';
-import { Button, Callout, DemoBadge, EmptyState, PageHeader, ProgressBar, downloadFile, relativeTime } from '../components/ui';
-import { isActive, progressOf } from '../lib/investigations/model';
+import { Badge, Button, Callout, CopyButton, DemoBadge, Dialog, EmptyState, PageHeader, ProgressBar, downloadFile, relativeTime } from '../components/ui';
+import { mergeById, parseBackup } from '../lib/backup';
+import { buildHandover } from '../lib/handover';
+import { formatDuration, isActive, progressOf, slaState } from '../lib/investigations/model';
 import { INVESTIGATION_STATUSES } from '../lib/playbooks/outcomes';
 import { useApp } from '../state/AppState';
 
 export function InvestigationsPage() {
-  const { investigations, playbookById } = useApp();
+  const { investigations, playbookById, settings, replaceInvestigations, notify } = useApp();
+  const [handover, setHandover] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const onImport = async (file: File | undefined) => {
+    if (!file) return;
+    const r = parseBackup(await file.text());
+    if (fileRef.current) fileRef.current.value = '';
+    if (r.investigations.length === 0) return notify(r.rejected[0] ?? 'No investigations found in the file.', 'danger');
+    const dup = r.investigations.filter((i) => investigations.some((x) => x.id === i.id)).length;
+    const overwrite = dup > 0 && window.confirm(`${dup} investigation(s) in the file already exist here. Replace them with the imported versions? Cancel keeps the existing ones.`);
+    const m = mergeById(investigations, r.investigations, overwrite);
+    replaceInvestigations(m.merged);
+    notify(`Imported ${m.added} new, replaced ${m.replaced}, skipped ${m.skipped}${r.rejected.length ? `; ${r.rejected.length} record(s) rejected` : ''}.`, r.rejected.length ? 'warning' : 'success');
+  };
   const [filter, setFilter] = useState<string>('active');
   const [q, setQ] = useState('');
   const [startOpen, setStartOpen] = useState(false);
@@ -33,6 +48,13 @@ export function InvestigationsPage() {
             <Button variant="primary" icon={<PlayCircle className="h-4 w-4" aria-hidden />} onClick={() => setStartOpen(true)}>
               Start investigation
             </Button>
+            <Button icon={<ClipboardList className="h-4 w-4" aria-hidden />} onClick={() => setHandover(buildHandover(investigations, playbookById, settings.slaMinutes, settings.analystName))}>
+              Shift handover
+            </Button>
+            <Button icon={<Upload className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>
+              Import
+            </Button>
+            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Import investigations JSON file" onChange={(e) => void onImport(e.target.files?.[0])} />
             <Button
               icon={<Download className="h-4 w-4" aria-hidden />}
               disabled={investigations.length === 0}
@@ -80,6 +102,7 @@ export function InvestigationsPage() {
                 <th className="px-3 py-2 font-medium">Severity</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="w-40 px-3 py-2 font-medium">Progress</th>
+                <th className="px-3 py-2 font-medium">Age / SLA</th>
                 <th className="px-3 py-2 font-medium">Analyst</th>
                 <th className="px-3 py-2 font-medium">Updated</th>
               </tr>
@@ -110,6 +133,17 @@ export function InvestigationsPage() {
                     <td className="px-3 py-2">
                       <ProgressBar value={progressOf(inv, pb).percent} label={`Progress of ${inv.id}`} />
                     </td>
+                    <td className="px-3 py-2 text-xs">
+                      {(() => {
+                        const s = slaState(inv, settings.slaMinutes);
+                        return (
+                          <>
+                            {formatDuration(s.ageMinutes)}{' '}
+                            {s.remainingMinutes !== null && (s.breached ? <Badge tone="bad">Past target</Badge> : <Badge tone="ok">{formatDuration(s.remainingMinutes)} left</Badge>)}
+                          </>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2 text-xs">{inv.analyst}</td>
                     <td className="px-3 py-2 text-xs text-muted">{relativeTime(inv.updatedAt)}</td>
                   </tr>
@@ -120,6 +154,19 @@ export function InvestigationsPage() {
         </div>
       )}
       <StartInvestigationDialog open={startOpen} onClose={() => setStartOpen(false)} />
+      <Dialog open={handover !== null} onClose={() => setHandover(null)} title="Shift handover summary" wide>
+        <p className="mb-2 text-sm text-muted">Open investigations, most urgent first. Copy it into your handover channel or download it.</p>
+        <pre className="scroll-thin max-h-[55vh] overflow-auto rounded-md border border-line bg-bg p-3 text-xs whitespace-pre-wrap">{handover}</pre>
+        <div className="mt-3 flex justify-end gap-2">
+          <CopyButton text={handover ?? ''} label="Copy Markdown" />
+          <Button size="sm" onClick={() => downloadFile('shift-handover.md', handover ?? '', 'text/markdown')}>
+            Download .md
+          </Button>
+          <Button size="sm" onClick={() => setHandover(null)}>
+            Close
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

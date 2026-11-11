@@ -1,5 +1,6 @@
 import { OUTCOME_INFO } from './playbooks/outcomes';
 import type { Playbook } from './playbooks/schema';
+import { defang, extractIndicators } from './indicators';
 import { evaluateDecision, progressOf, sortedTimeline } from './investigations/model';
 import type { Investigation } from './investigations/model';
 
@@ -33,6 +34,8 @@ export interface HandoffReport {
   stepsCompleted: { title: string; completedAt: string | null; notes: string }[];
   stepsPending: string[];
   evidence: { label: string; value: string; required: boolean }[];
+  /** Indicators found in recorded evidence, timeline, and findings; values are defanged. */
+  indicators: { type: string; value: string; note: string }[];
   techniques: { id: string; name: string; note: string }[];
   benignExplanationsConsidered: string[];
   indicatorsSupportingSuspicion: string[];
@@ -138,6 +141,11 @@ export function buildReport(
       .map((s) => ({ title: s.title, completedAt: inv.steps[s.id]?.completedAt ?? null, notes: inv.steps[s.id]?.notes ?? '' })),
     stepsPending: progress.pendingSteps,
     evidence,
+    indicators: extractIndicators([
+      ...evidence.map((e) => ({ label: e.label, value: e.value })),
+      ...inv.timeline.map((t) => ({ label: 'Timeline', value: t.description })),
+      ...inv.findings.map((f) => ({ label: 'Findings', value: f.text })),
+    ]).map((i) => ({ type: i.type, value: defang(i.value), note: i.note })),
     techniques: inv.relatedTechniques.map((t) => ({ id: t.id, name: techniqueName(t.id) ?? '', note: t.note })),
     benignExplanationsConsidered: inv.findings.filter((f) => f.kind === 'contradicting').map((f) => f.text),
     indicatorsSupportingSuspicion: inv.findings.filter((f) => f.kind === 'supporting').map((f) => f.text),
@@ -210,6 +218,10 @@ export function reportToMarkdown(r: HandoffReport): string {
   if (r.stepsPending.length) out.push('', '**Not completed:**', '', r.stepsPending.map((s) => `- [ ] ${mdText(s)}`).join('\n'));
   out.push('', '## Evidence collected', '');
   out.push(r.evidence.length ? r.evidence.map((e) => (needsFence(e.value) ? `**${mdText(e.label)}**\n\n${mdFence(e.value)}` : `- **${mdText(e.label)}:** ${mdText(e.value)}`)).join('\n\n') : '_No evidence recorded._');
+  if (r.indicators.length) {
+    out.push('', '## Indicators (defanged)', '', '| Type | Value | Note |', '| --- | --- | --- |');
+    for (const i of r.indicators) out.push(`| ${i.type} | ${mdText(i.value).replace(/\|/g, '\\|')} | ${mdText(i.note)} |`);
+  }
   out.push('', '## Relevant ATT&CK techniques (hypotheses)', '');
   out.push(bullets(r.techniques.map((t) => `${t.id}${t.name ? ` ${t.name}` : ''}${t.note ? ` - ${t.note}` : ''}`)));
   out.push('', '## Benign explanations considered', '', bullets(r.benignExplanationsConsidered));

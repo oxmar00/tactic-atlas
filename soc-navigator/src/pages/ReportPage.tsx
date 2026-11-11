@@ -223,6 +223,17 @@ function ReportPreview({ r }: { r: HandoffReport }) {
       <RSection title="Evidence collected">
         {r.evidence.length ? <KV items={r.evidence.map((e) => [e.label, e.value])} mono /> : <Empty />}
       </RSection>
+      {r.indicators.length > 0 && (
+        <RSection title="Indicators (defanged)">
+          <ul className="space-y-0.5 font-mono text-xs">
+            {r.indicators.map((i) => (
+              <li key={`${i.type}-${i.value}`} className="break-all">
+                <span className="text-muted">{i.type}</span> {i.value} {i.note && <span className="font-sans text-faint">({i.note})</span>}
+              </li>
+            ))}
+          </ul>
+        </RSection>
+      )}
       <RSection title="Relevant ATT&CK techniques (hypotheses)">
         <Bullets items={r.techniques.map((t) => `${t.id}${t.name ? ` ${t.name}` : ''}${t.note ? ` - ${t.note}` : ''}`)} />
       </RSection>
