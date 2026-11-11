@@ -1,0 +1,11 @@
+{
+  "name": "SOC Navigator - ATT&CK Tier 1 Investigation Guide",
+  "short_name": "SOC Navigator",
+  "description": "MITRE ATT&CK matrix, Tier 1 investigation playbooks, and Tier 2 handoff reports.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0f15",
+  "theme_color": "#0a0f15",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

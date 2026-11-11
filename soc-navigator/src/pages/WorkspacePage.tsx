@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Bot, CheckCircle2, Circle, Download, FileText, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Bot, CheckCircle2, Circle, Clock, Download, FileText, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { InvestigationStatusBadge, PlaybookStatusBadge } from '../components/badges';
 import { DecisionTree } from '../components/playbook/DecisionTree';
 import { DraftNotice } from '../components/playbook/PlaybookView';
 import { QueryCard } from '../components/playbook/QueryCard';
 import { StepCard } from '../components/playbook/StepCard';
-import { Badge, Button, Callout, Card, DeferredInput, DeferredTextArea, DemoBadge, EmptyState, Field, ProgressBar, TabPanel, Tabs, Term, cx, downloadFile, formatDate } from '../components/ui';
+import { Badge, Button, Callout, Card, CopyButton, DeferredInput, DeferredTextArea, DemoBadge, EmptyState, Field, ProgressBar, TabPanel, Tabs, Term, cx, downloadFile, formatDate } from '../components/ui';
 import { ASSISTANT_TASKS, TASK_LABEL, runLocalTask, runRemoteTask } from '../lib/assistant/assistant';
 import type { AssistantResult, AssistantTask } from '../lib/assistant/assistant';
 import {
@@ -19,6 +19,9 @@ import {
   addTimelineEntry,
   answerDecision,
   applyOutcome,
+  chainInvestigation,
+  formatDuration,
+  slaState,
   evaluateDecision,
   progressOf,
   removeListItem,
@@ -33,20 +36,23 @@ import {
   update,
 } from '../lib/investigations/model';
 import type { FindingKind, Investigation } from '../lib/investigations/model';
+import { defang, extractIndicators, indicatorsToCsv, indicatorsToList } from '../lib/indicators';
 import { DISPOSITIONS, INVESTIGATION_STATUSES, OUTCOME_INFO } from '../lib/playbooks/outcomes';
 import type { Disposition, InvestigationStatus } from '../lib/playbooks/outcomes';
 import type { Playbook } from '../lib/playbooks/schema';
 import { useApp } from '../state/AppState';
 
-type RightTab = 'evidence' | 'findings' | 'assessment' | 'assistant' | 'notes';
+type RightTab = 'evidence' | 'indicators' | 'findings' | 'assessment' | 'assistant' | 'notes';
 
 export function WorkspacePage() {
   const { id = '' } = useParams();
-  const { investigations, playbookById, updateInvestigation, deleteInvestigation, notify } = useApp();
+  const { investigations, playbookById, updateInvestigation, deleteInvestigation, addInvestigation, library, settings, notify } = useApp();
   const navigate = useNavigate();
   const inv = investigations.find((i) => i.id === id);
   const pb = inv ? playbookById.get(inv.playbookId) : undefined;
   const [tab, setTab] = useState<RightTab>('evidence');
+  // A different investigation (e.g. after chaining) starts on the Evidence tab.
+  useEffect(() => setTab('evidence'), [id]);
 
   if (!inv) {
     return (
@@ -134,6 +140,27 @@ export function WorkspacePage() {
             </Button>
           </div>
         </div>
+        {(() => {
+          const s = slaState(inv, settings.slaMinutes);
+          return (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              Age {formatDuration(s.ageMinutes)} - target for {inv.severity}: {formatDuration(s.targetMinutes)}
+              {s.remainingMinutes === null ? (
+                <Badge tone={s.breached ? 'warn' : 'ok'}>{s.breached ? 'Closed past target' : 'Closed within target'}</Badge>
+              ) : s.breached ? (
+                <Badge tone="bad">Past target by {formatDuration(s.remainingMinutes)}</Badge>
+              ) : (
+                <Badge tone="ok">{formatDuration(s.remainingMinutes)} left</Badge>
+              )}
+              {(inv.linked ?? []).map((l) => (
+                <Link key={l} to={`/investigations/${l}`} className="font-mono text-accent hover:underline">
+                  linked: {l}
+                </Link>
+              ))}
+            </p>
+          );
+        })()}
         <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem_14rem]">
           <div>
             <p className="label">Progress</p>
@@ -206,6 +233,37 @@ export function WorkspacePage() {
                   }}
                 />
               </Card>
+              {(() => {
+                const related = new Set(pb.relatedTechniques.map((r) => r.id));
+                const candidates = library.map((e) => e.playbook).filter((p) => p.id !== pb.id && p.techniques.some((t) => related.has(t) || related.has(t.split('.')[0])));
+                if (candidates.length === 0) return null;
+                return (
+                  <Card title="Continue with a related playbook">
+                    <p className="mb-2 text-xs text-muted">If your findings point to a related technique, start a linked investigation. The alert reference, timeline, and matching evidence fields are carried over.</p>
+                    <ul className="space-y-1.5">
+                      {candidates.map((c) => (
+                        <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="min-w-0 flex-1">
+                            {c.title} <span className="font-mono text-xs text-faint">{c.id}</span>
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const r = chainInvestigation(inv, c, settings.analystName);
+                              addInvestigation(r.next);
+                              mutate(() => r.source);
+                              notify(`Started ${r.next.id}; ${r.carried.length} evidence field(s) carried over.`, 'success');
+                              navigate(`/investigations/${r.next.id}`);
+                            }}
+                          >
+                            Start linked investigation
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                );
+              })()}
               <Card title="All query templates for this playbook">
                 <p className="mb-2 text-xs text-muted">Placeholders are pre-filled from recorded evidence where possible. Copy and run them in your own SIEM.</p>
                 <div className="space-y-2">
@@ -227,6 +285,7 @@ export function WorkspacePage() {
                 onChange={setTab}
                 tabs={[
                   { id: 'evidence', label: 'Evidence', count: Object.keys(inv.evidence).length },
+                  { id: 'indicators', label: 'Indicators' },
                   { id: 'findings', label: 'Findings', count: inv.findings.length + inv.timeline.length },
                   { id: 'assessment', label: 'Assessment' },
                   { id: 'assistant', label: 'Assistant' },
@@ -236,6 +295,7 @@ export function WorkspacePage() {
             </div>
             <TabPanel id={tab} className="scroll-thin max-h-[calc(100vh-9rem)] overflow-y-auto p-4">
               {tab === 'evidence' && <EvidenceTab inv={inv} pb={pb} mutate={mutate} />}
+              {tab === 'indicators' && <IndicatorsTab inv={inv} pb={pb} />}
               {tab === 'findings' && <FindingsTab inv={inv} mutate={mutate} />}
               {tab === 'assessment' && <AssessmentTab inv={inv} mutate={mutate} />}
               {tab === 'assistant' && <AssistantTab inv={inv} pb={pb} />}
@@ -276,6 +336,59 @@ function EvidenceTab({ inv, pb, mutate }: { inv: Investigation; pb: Playbook | u
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function IndicatorsTab({ inv, pb }: { inv: Investigation; pb: Playbook | undefined }) {
+  const labels = new Map((pb?.evidence ?? []).map((e) => [e.id, e.label]));
+  const items = extractIndicators([
+    ...Object.entries(inv.evidence).map(([k, v]) => ({ label: labels.get(k) ?? k, value: v })),
+    ...inv.timeline.map((t) => ({ label: 'Timeline', value: t.description })),
+    ...inv.findings.map((f) => ({ label: 'Findings', value: f.text })),
+    { label: 'Notes', value: inv.notes },
+  ]);
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        Indicators found automatically in what you recorded (evidence, timeline, findings, notes). Values are shown defanged so they cannot be clicked. Review before sharing: file names and internal hosts can be picked up by mistake.
+      </p>
+      {items.length === 0 ? (
+        <EmptyState title="No indicators found yet">Record IPs, domains, URLs, hashes, or email addresses in the evidence fields.</EmptyState>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <CopyButton text={indicatorsToList(items)} label="Copy list (defanged)" />
+            <CopyButton text={indicatorsToList(items, false)} label="Copy raw values" />
+            <Button size="sm" icon={<Download className="h-3.5 w-3.5" aria-hidden />} onClick={() => downloadFile(`${inv.id}-indicators.csv`, indicatorsToCsv(items), 'text/csv')}>
+              CSV
+            </Button>
+          </div>
+          <table className="w-full text-left text-xs">
+            <thead className="text-faint">
+              <tr>
+                <th className="py-1 pr-2 font-medium">Type</th>
+                <th className="py-1 pr-2 font-medium">Value (defanged)</th>
+                <th className="py-1 font-medium">Note / found in</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => (
+                <tr key={`${i.type}-${i.value}`} className="border-t border-line align-top">
+                  <td className="py-1 pr-2">
+                    <Badge>{i.type}</Badge>
+                  </td>
+                  <td className="py-1 pr-2 font-mono break-all">{defang(i.value)}</td>
+                  <td className="py-1 text-muted">
+                    {i.note && <span className="text-fg">{i.note}. </span>}
+                    {i.sources.join(', ')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }

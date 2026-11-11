@@ -14,7 +14,7 @@ export function QueryCard({ query, evidence, defaultOpen = false, playbookId }: 
   const [values, setValues] = useState<Record<string, string>>({});
   const merged = { ...suggested, ...values };
   const filled = fillQuery(query, merged);
-  const tone = query.language === 'kql' ? 'accent' : query.language === 'spl' ? 'violet' : 'neutral';
+  const tone = query.language === 'kql' ? 'accent' : query.language === 'spl' ? 'violet' : query.language === 'esql' ? 'ok' : 'neutral';
   const panelId = `q-${playbookId ?? 'x'}-${query.id}`;
 
   return (
@@ -23,14 +23,14 @@ export function QueryCard({ query, evidence, defaultOpen = false, playbookId }: 
         {open ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden />}
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <Badge tone={tone}>{query.language.toUpperCase()}</Badge>
+            <Badge tone={tone}>{query.language === 'esql' ? 'ES|QL' : query.language.toUpperCase()}</Badge>
             <span className="font-medium text-fg-strong">{query.title}</span>
           </span>
           <span className="mt-0.5 block text-xs text-muted">{query.platform}</span>
         </span>
       </button>
-      {open && (
-        <div id={panelId} className="space-y-3 border-t border-line px-3 py-3 text-sm">
+      {
+        <div id={panelId} className={cx('space-y-3 border-t border-line px-3 py-3 text-sm', !open && 'print-expand hidden')}>
           <p>{query.purpose}</p>
           <p className="text-xs text-muted">
             <span className="font-semibold text-fg">Data sources:</span> {query.dataSources.join(', ')}
@@ -119,7 +119,7 @@ export function QueryCard({ query, evidence, defaultOpen = false, playbookId }: 
           )}
           <p className="text-[11px] text-faint">Template only - SOC Navigator has not executed this query against any data source.</p>
         </div>
-      )}
+      }
     </div>
   );
 }

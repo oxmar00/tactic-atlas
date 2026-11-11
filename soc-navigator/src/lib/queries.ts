@@ -77,5 +77,6 @@ export function suggestFromEvidence(placeholders: QueryPlaceholder[], evidence: 
 export const LANGUAGE_LABEL: Record<QueryLanguage, string> = {
   kql: 'KQL (Microsoft Sentinel / Defender XDR)',
   spl: 'SPL (Splunk)',
+  esql: 'ES|QL (Elastic Security)',
   generic: 'Generic procedure',
 };

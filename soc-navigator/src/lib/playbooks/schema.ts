@@ -11,7 +11,7 @@ import { z } from 'zod';
 export const PLAYBOOK_SCHEMA_VERSION = 1 as const;
 export const PLAYBOOK_STATUSES = ['Draft', 'Reviewed', 'Approved'] as const;
 export const DIFFICULTIES = ['Beginner', 'Intermediate', 'Advanced'] as const;
-export const QUERY_LANGUAGES = ['kql', 'spl', 'generic'] as const;
+export const QUERY_LANGUAGES = ['kql', 'spl', 'esql', 'generic'] as const;
 export const OUTCOMES = ['benign', 'contained', 'investigate', 'escalate', 'critical', 'gap'] as const;
 export const PREREQ_TYPES = ['access', 'tool', 'telemetry', 'information'] as const;
 export const PLACEHOLDER_KINDS = ['string', 'datetime', 'timespan', 'number'] as const;
@@ -110,6 +110,14 @@ export const evidenceFieldSchema = z.object({
   multiline: z.boolean(),
 });
 
+/** Optional detection-rule companion in Sigma format (YAML text). Shown and exported as text only. */
+export const sigmaRuleSchema = z.object({
+  id: slug,
+  title: shortText,
+  description: text,
+  rule: z.string().min(1).max(LIMIT.long),
+});
+
 export const reviewEventSchema = z.object({
   version: shortText,
   status: z.enum(PLAYBOOK_STATUSES),
@@ -153,7 +161,8 @@ export const playbookSchema = z
       immediate: textList(0, 15),
       benignClosure: textList(1, 15),
     }),
-    queries: z.array(queryTemplateSchema).max(20),
+    queries: z.array(queryTemplateSchema).max(30),
+    sigmaRules: z.array(sigmaRuleSchema).max(10).optional(),
     detectionConsiderations: textList(0, 15),
     visibilityGaps: textList(0, 15),
     relatedTechniques: z.array(z.object({ id: techniqueIdSchema, reason: text })).max(20),
@@ -233,6 +242,7 @@ function hasCycle(nodes: z.infer<typeof decisionNodeSchema>[]): boolean {
 
 export type Playbook = z.infer<typeof playbookSchema>;
 export type PlaybookStep = z.infer<typeof stepSchema>;
+export type SigmaRule = z.infer<typeof sigmaRuleSchema>;
 export type QueryTemplate = z.infer<typeof queryTemplateSchema>;
 export type QueryPlaceholder = z.infer<typeof placeholderSchema>;
 export type DecisionNode = z.infer<typeof decisionNodeSchema>;

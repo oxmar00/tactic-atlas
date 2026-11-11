@@ -1,0 +1,96 @@
+name: Refresh ATT&CK snapshot
+
+# Checks MITRE's official STIX repository once a month (and on demand). When a newer Enterprise
+# release exists, it regenerates the SOC Navigator snapshot, runs the tests, and opens a pull
+# request for human review. Nothing is merged or deployed automatically.
+#
+# Requires: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull
+# requests". Pull requests opened with the default token do not trigger other workflows, so the
+# test result is recorded in the pull request description; re-run checks by pushing to the branch
+# or closing and reopening the pull request.
+
+on:
+  schedule:
+    - cron: "17 6 3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: attack-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: soc-navigator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: soc-navigator/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download and normalize the latest Enterprise ATT&CK release
+        run: npm run attack:update | tee "$RUNNER_TEMP/update.log"
+
+      - name: Stop when nothing changed
+        id: diff
+        run: |
+          if git diff --quiet -- public/data/attack-enterprise.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Snapshot already matches the latest release."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run unit tests against the new snapshot
+        if: steps.diff.outputs.changed == 'true'
+        id: tests
+        continue-on-error: true
+        run: npm test 2>&1 | tail -n 40 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          version=$(node -p "require('./public/data/attack-enterprise.json').meta.version")
+          branch="automation/attack-${version}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add public/data/attack-enterprise.json
+          git commit -m "SOC Navigator: refresh ATT&CK Enterprise snapshot to v${version}"
+          git push --force-with-lease origin "$branch"
+          {
+            echo "Automated refresh of the bundled MITRE ATT&CK Enterprise snapshot to **v${version}** from the official attack-stix-data repository."
+            echo
+            echo "Unit tests on this snapshot: **${TEST_OUTCOME}**. A failure usually means a playbook references a technique MITRE revoked; update the playbook to the replacement ID and re-review it."
+            echo
+            echo "### Update summary"
+            echo '```'
+            tail -n 12 "$RUNNER_TEMP/update.log"
+            echo '```'
+            echo "### Test output (tail)"
+            echo '```'
+            cat "$RUNNER_TEMP/test.log"
+            echo '```'
+            echo "Review added and removed technique IDs before merging. Playbooks are not modified by this change."
+          } > "$RUNNER_TEMP/body.md"
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            gh pr edit "$branch" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --base main --head "$branch" --title "Refresh ATT&CK Enterprise snapshot to v${version}" --body-file "$RUNNER_TEMP/body.md"
+          fi

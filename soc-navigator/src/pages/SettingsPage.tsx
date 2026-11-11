@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CloudDownload, Database, PlugZap, RefreshCw, RotateCcw, Settings as SettingsIcon, Trash2 } from 'lucide-react';
 import { Badge, Button, Callout, Card, DeferredInput, Field, PageHeader, downloadFile, formatDate } from '../components/ui';
 import { validateProxyEndpoint } from '../lib/assistant/assistant';
@@ -6,7 +6,10 @@ import { checkLatestRelease, compareVersions, downloadAndApplyRelease, revertToB
 import type { ReleaseInfo } from '../lib/attack/loader';
 import { QUERY_LANGUAGES } from '../lib/playbooks/schema';
 import { LANGUAGE_LABEL } from '../lib/queries';
-import { DEFAULT_SETTINGS, ROLES, ROLE_LABEL } from '../lib/settings';
+import { mergeById, parseBackup } from '../lib/backup';
+import { SEVERITIES } from '../lib/investigations/model';
+import { DEFAULT_SETTINGS, ROLES, ROLE_LABEL, THEMES } from '../lib/settings';
+import type { Theme } from '../lib/settings';
 import type { Role } from '../lib/settings';
 import { KEYS } from '../lib/storage';
 import { useApp } from '../state/AppState';
@@ -53,6 +56,20 @@ export function SettingsPage() {
     }
   };
 
+  const backupRef = useRef<HTMLInputElement>(null);
+  const importBackup = async (file: File | undefined) => {
+    if (!file) return;
+    const r = parseBackup(await file.text());
+    if (backupRef.current) backupRef.current.value = '';
+    if (r.investigations.length + r.playbooks.length === 0) return notify(r.rejected[0] ?? 'Nothing to import.', 'danger');
+    const overwrite = window.confirm('Replace existing investigations and local playbooks that have the same ID? Cancel keeps the existing ones and only adds new records.');
+    const inv = mergeById(app.investigations, r.investigations, overwrite);
+    const pbs = mergeById(app.localPlaybooks, r.playbooks, overwrite);
+    app.replaceInvestigations(inv.merged);
+    app.replaceLocalPlaybooks(pbs.merged);
+    notify(`Imported ${inv.added + inv.replaced} investigation(s) and ${pbs.added + pbs.replaced} playbook(s); skipped ${inv.skipped + pbs.skipped}${r.rejected.length ? `; ${r.rejected.length} rejected` : ''}.`, r.rejected.length ? 'warning' : 'success');
+  };
+
   const exportAll = () =>
     downloadFile(
       'soc-navigator-backup.json',
@@ -87,7 +104,40 @@ export function SettingsPage() {
               ))}
             </select>
           </Field>
+          <Field label="Theme" htmlFor="s-theme">
+            <select id="s-theme" className="input" value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as Theme })}>
+              {THEMES.map((t) => (
+                <option key={t} value={t}>
+                  {t === 'system' ? 'Match system' : t === 'dark' ? 'Dark' : 'Light'}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
+        <fieldset className="mt-4">
+          <legend className="label">SLA target: minutes from investigation start to escalation or resolution</legend>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {SEVERITIES.slice()
+              .reverse()
+              .map((sev) => (
+                <Field key={sev} label={sev} htmlFor={`s-sla-${sev}`}>
+                  <input
+                    id={`s-sla-${sev}`}
+                    type="number"
+                    min={1}
+                    max={43200}
+                    className="input"
+                    value={settings.slaMinutes[sev]}
+                    onChange={(e) => {
+                      const n = Math.round(Number(e.target.value));
+                      if (Number.isFinite(n) && n >= 1 && n <= 43200) updateSettings({ slaMinutes: { ...settings.slaMinutes, [sev]: n } });
+                    }}
+                  />
+                </Field>
+              ))}
+          </div>
+          <p className="mt-1 text-xs text-faint">Used for the age and SLA badges and the shift handover. Set these to your organization&apos;s policy; the defaults are placeholders.</p>
+        </fieldset>
       </Card>
 
       <Card
@@ -252,6 +302,10 @@ export function SettingsPage() {
           <Button size="sm" onClick={exportAll}>
             Export backup (JSON)
           </Button>
+          <Button size="sm" onClick={() => backupRef.current?.click()}>
+            Import backup or investigations
+          </Button>
+          <input ref={backupRef} type="file" accept="application/json,.json" className="hidden" aria-label="Import backup JSON file" onChange={(e) => void importBackup(e.target.files?.[0])} />
           <Button size="sm" onClick={() => { app.loadDemoData(); notify('Demo investigations loaded (marked DEMO).', 'success'); }}>
             Load demo data
           </Button>

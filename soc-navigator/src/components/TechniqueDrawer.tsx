@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { BookOpen, ExternalLink, Grid3x3, Info, PlayCircle, X } from 'lucide-react';
 import { GENERAL_STEPS, TACTIC_GUIDANCE } from '../data/generalGuidance';
 import { coverageLevel } from '../lib/playbooks/library';
+import { tacticAtlasUrl } from '../lib/tacticAtlas';
 import type { Playbook } from '../lib/playbooks/schema';
 import { useApp } from '../state/AppState';
 import { AttackText } from './AttackText';
@@ -12,7 +13,7 @@ import { Badge, Button, Callout, cx } from './ui';
 
 /** Technique details panel, available from every page without navigating away. */
 export function TechniqueDrawer() {
-  const { techniquePanel, openTechnique, attack, coverage } = useApp();
+  const { techniquePanel, openTechnique, attack, coverage, tacticAtlas, tacticAtlasBase } = useApp();
   const closeRef = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const [startFor, setStartFor] = useState<string | null>(null);
@@ -134,6 +135,26 @@ export function TechniqueDrawer() {
                     )}
                   </Section>
 
+                  {tacticAtlas && tacticAtlas.lookup(t.id).length > 0 && (
+                    <Section title="Detection and response guidance (TacticAtlas library)">
+                      <ul className="space-y-1.5">
+                        {tacticAtlas.lookup(t.id).map((r) => (
+                          <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-panel-2 px-2.5 py-1.5 text-sm">
+                            <a href={tacticAtlasUrl(r.id, tacticAtlasBase)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                              {r.name}
+                              <ExternalLink className="h-3 w-3" aria-hidden />
+                              <span className="sr-only">(opens TacticAtlas in a new tab)</span>
+                            </a>
+                            <span className="font-mono text-xs text-faint">{r.id}</span>
+                            {r.severity && <Badge>{r.severity}</Badge>}
+                            <span className="ml-auto text-xs text-muted">{r.relation === 'technique' ? 'Covers this technique' : 'Covers the parent technique'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-xs text-faint">Detection engineering, telemetry requirements, and incident-response phases. Mapped to ATT&amp;CK v{tacticAtlas.attackVersion}.</p>
+                    </Section>
+                  )}
+
                   <Section title="Official description (MITRE ATT&CK)">
                     <AttackText text={t.description} className="text-sm leading-relaxed text-fg" />
                   </Section>
@@ -206,6 +227,38 @@ export function TechniqueDrawer() {
                         {t.logSources.length > 12 && <p className="mt-1 text-xs text-faint">{t.logSources.length - 12} more log sources on the MITRE page.</p>}
                       </>
                     )}
+                  </Section>
+
+                  <RefList
+                    title={`Threat groups observed using this technique (${t.groupIds.length})`}
+                    empty="MITRE lists no group with a direct relationship to this technique."
+                    note="From official ATT&CK group relationships. A group using a technique says nothing about who is behind your alert."
+                    items={t.groupIds.map((g) => index!.groupById.get(g)).filter((g): g is NonNullable<typeof g> => !!g).map((g) => ({ id: g.id, name: g.name, url: g.url, extra: g.aliases.slice(0, 3).join(', ') }))}
+                  />
+                  <RefList
+                    title={`Malware and tools that implement it (${t.softwareIds.length})`}
+                    empty="MITRE lists no software for this technique."
+                    items={t.softwareIds.map((s) => index!.softwareById.get(s)).filter((s): s is NonNullable<typeof s> => !!s).map((s) => ({ id: s.id, name: s.name, url: s.url, extra: s.kind }))}
+                  />
+                  <Section title={`Mitigations (${t.mitigations.length})`}>
+                    {t.mitigations.length === 0 ? (
+                      <p className="text-sm text-muted">MITRE lists no mitigation for this technique.</p>
+                    ) : (
+                      <ul className="space-y-1.5 text-sm">
+                        {t.mitigations.map((m) => {
+                          const ref = index!.mitigationById.get(m.id);
+                          return (
+                            <li key={m.id}>
+                              <a href={ref?.url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent hover:underline">
+                                {m.id} {ref?.name}
+                              </a>
+                              {m.note && <AttackText text={m.note} className="text-muted" />}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <p className="mt-1 text-xs text-faint">For the detection and platform teams; Tier 1 does not apply mitigations during an investigation.</p>
                   </Section>
 
                   <Section title="Detection considerations">
@@ -286,6 +339,36 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
       {children}
     </section>
+  );
+}
+
+function RefList({ title, items, empty, note }: { title: string; items: { id: string; name: string; url: string; extra: string }[]; empty: string; note?: string }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? items : items.slice(0, 12);
+  return (
+    <Section title={title}>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">{empty}</p>
+      ) : (
+        <>
+          <ul className="flex flex-wrap gap-1.5">
+            {shown.map((i) => (
+              <li key={i.id}>
+                <a href={i.url} target="_blank" rel="noopener noreferrer" title={`${i.id}${i.extra ? ` - ${i.extra}` : ''}`} className="inline-block rounded border border-line bg-panel-2 px-1.5 py-0.5 text-xs hover:border-accent hover:text-accent">
+                  {i.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+          {items.length > 12 && (
+            <Button size="sm" variant="ghost" onClick={() => setAll((a) => !a)} aria-expanded={all}>
+              {all ? 'Show fewer' : `Show all ${items.length}`}
+            </Button>
+          )}
+          {note && <p className="mt-1 text-xs text-faint">{note}</p>}
+        </>
+      )}
+    </Section>
   );
 }
 

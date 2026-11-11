@@ -3,7 +3,10 @@ import type {
   AttackDataset,
   DataComponentRef,
   DetectionStrategyRef,
+  GroupRef,
   LogSourceRef,
+  MitigationRef,
+  SoftwareRef,
   RetiredTechnique,
   Tactic,
   Technique,
@@ -155,6 +158,8 @@ export function normalizeStixBundle(bundle: unknown, options: NormalizeOptions):
   const parentOf = new Map<string, string>(); // child stix id -> parent stix id
   const strategiesFor = new Map<string, string[]>(); // attack-pattern stix id -> detection strategy stix ids
   const revokedBy = new Map<string, string>(); // stix id -> stix id
+  const usedBy = new Map<string, string[]>(); // attack-pattern stix id -> group/software stix ids
+  const mitigatedBy = new Map<string, { ref: string; note: string }[]>();
   for (const r of objects) {
     if (r.type !== 'relationship' || r.revoked === true) continue;
     const src = typeof r.source_ref === 'string' ? r.source_ref : '';
@@ -172,10 +177,46 @@ export function normalizeStixBundle(bundle: unknown, options: NormalizeOptions):
       case 'revoked-by':
         revokedBy.set(src, tgt);
         break;
+      case 'uses':
+        if (tgt.startsWith('attack-pattern--') && /^(intrusion-set|malware|tool)--/.test(src)) {
+          const list = usedBy.get(tgt) ?? [];
+          list.push(src);
+          usedBy.set(tgt, list);
+        }
+        break;
+      case 'mitigates': {
+        const list = mitigatedBy.get(tgt) ?? [];
+        list.push({ ref: src, note: stripCitations(typeof r.description === 'string' ? r.description : '') });
+        mitigatedBy.set(tgt, list);
+        break;
+      }
       default:
         break;
     }
   }
+
+  // --- Groups, software, mitigations (active enterprise objects only) ----------------------
+  const groups: GroupRef[] = [];
+  const software: SoftwareRef[] = [];
+  const mitigations: MitigationRef[] = [];
+  const refIdByStix = new Map<string, string>();
+  for (const o of objects) {
+    if (!['intrusion-set', 'malware', 'tool', 'course-of-action'].includes(o.type) || !isActive(o) || !inEnterprise(o)) continue;
+    const ext = mitreRef(o);
+    if (!ext?.external_id || !o.name) continue;
+    const url = ext.url ?? '';
+    if (o.type === 'intrusion-set' && /^G\d{4}$/.test(ext.external_id)) {
+      groups.push({ id: ext.external_id, name: o.name, aliases: asStringArray(o.aliases).filter((a) => a !== o.name), url });
+    } else if ((o.type === 'malware' || o.type === 'tool') && /^S\d{4}$/.test(ext.external_id)) {
+      software.push({ id: ext.external_id, name: o.name, kind: o.type, url });
+    } else if (o.type === 'course-of-action' && /^M\d{4}$/.test(ext.external_id)) {
+      mitigations.push({ id: ext.external_id, name: o.name, url });
+    } else continue;
+    refIdByStix.set(o.id, ext.external_id);
+  }
+  groups.sort((a, c) => a.name.localeCompare(c.name));
+  software.sort((a, c) => a.name.localeCompare(c.name));
+  mitigations.sort((a, c) => a.id.localeCompare(c.id));
 
   // --- Techniques --------------------------------------------------------------------------
   const maxLogSources = options.maxLogSources ?? 24;
@@ -273,6 +314,12 @@ export function normalizeStixBundle(bundle: unknown, options: NormalizeOptions):
       dataComponents: [...dcNames].sort(),
       logSources,
       detectionStrategies,
+      groupIds: uniqueSorted((usedBy.get(o.id) ?? []).filter((s) => s.startsWith('intrusion-set--')).map((s) => refIdByStix.get(s))),
+      softwareIds: uniqueSorted((usedBy.get(o.id) ?? []).filter((s) => !s.startsWith('intrusion-set--')).map((s) => refIdByStix.get(s))),
+      mitigations: (mitigatedBy.get(o.id) ?? [])
+        .map((m) => ({ id: refIdByStix.get(m.ref) ?? '', note: m.note }))
+        .filter((m) => m.id)
+        .sort((a, c) => a.id.localeCompare(c.id)),
       version: typeof o.x_mitre_version === 'string' ? o.x_mitre_version : null,
       modified: o.modified ?? '',
     });
@@ -312,13 +359,23 @@ export function normalizeStixBundle(bundle: unknown, options: NormalizeOptions):
         deprecated: dedupedRetired.filter((r) => r.status === 'deprecated').length,
         detectionStrategies: strategyCount,
         analytics: analyticsCount,
+        groups: groups.length,
+        software: software.length,
+        mitigations: mitigations.length,
       },
     },
     tactics,
     techniques,
     retired: dedupedRetired,
     dataComponents,
+    groups,
+    software,
+    mitigations,
   };
+}
+
+function uniqueSorted(ids: (string | undefined)[]): string[] {
+  return [...new Set(ids.filter((x): x is string => !!x))].sort();
 }
 
 /** Sorts T1003 < T1003.001 < T1003.002 < T1005 numerically. */

@@ -9,10 +9,16 @@ import { coverageLevel } from '../lib/playbooks/library';
 import { isActive } from '../lib/investigations/model';
 import { useApp } from '../state/AppState';
 
-const BAR = '#3a9be6'; // validated against the dark panel surface (#101720): lightness band + >= 3:1 contrast
+// Chart colors per theme. Bar fills clear 3:1 contrast against their panel surface (dark: palette validator; light: WCAG ratio 4.5:1).
+const CHART = {
+  dark: { bar: '#3a9be6', grid: '#253243', axis: '#93a3b8', label: '#dce5ef', tipBg: '#1b2633', tipBorder: '#34465c' },
+  light: { bar: '#1f78d1', grid: '#d2d9e3', axis: '#4a5868', label: '#1f2a37', tipBg: '#ffffff', tipBorder: '#b3bfcd' },
+};
 
 export function DashboardPage() {
-  const { attack, library, investigations, usage, playbookById, coverage, openTechnique } = useApp();
+  const { attack, library, investigations, usage, playbookById, coverage, openTechnique, settings } = useApp();
+  const isLight = settings.theme === 'light' || (settings.theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches);
+  const C = isLight ? CHART.light : CHART.dark;
   const [startOpen, setStartOpen] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const index = attack.index;
@@ -130,18 +136,18 @@ export function DashboardPage() {
             <div className="h-[420px]" role="img" aria-label="Bar chart of playbook coverage percentage per ATT&CK tactic. Use Table view for exact values.">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={coverageRows} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }} barCategoryGap={3}>
-                  <CartesianGrid horizontal={false} stroke="#253243" strokeDasharray="0" />
-                  <XAxis type="number" domain={[0, axisMax]} ticks={axisTicks} tickFormatter={(v: number) => `${v}%`} stroke="#93a3b8" tick={{ fill: '#93a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="tactic" width={150} stroke="#93a3b8" tick={{ fill: '#dce5ef', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <CartesianGrid horizontal={false} stroke={C.grid} strokeDasharray="0" />
+                  <XAxis type="number" domain={[0, axisMax]} ticks={axisTicks} tickFormatter={(v: number) => `${v}%`} stroke={C.axis} tick={{ fill: C.axis, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="tactic" width={150} stroke={C.axis} tick={{ fill: C.label, fontSize: 12 }} axisLine={false} tickLine={false} />
                   <Tooltip
                     cursor={{ fill: 'rgba(79,179,255,0.08)' }}
-                    contentStyle={{ background: '#1b2633', border: '1px solid #34465c', borderRadius: 6, color: '#dce5ef', fontSize: 12 }}
+                    contentStyle={{ background: C.tipBg, border: `1px solid ${C.tipBorder}`, borderRadius: 6, color: C.label, fontSize: 12 }}
                     formatter={(_v, _n, item) => {
                       const p = item.payload as (typeof coverageRows)[number];
                       return [`${p.pct}% (${p.covered} of ${p.total})`, 'Playbook coverage'];
                     }}
                   />
-                  <Bar dataKey="pct" fill={BAR} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false} />
+                  <Bar dataKey="pct" fill={C.bar} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

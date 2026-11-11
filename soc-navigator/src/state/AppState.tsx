@@ -16,6 +16,8 @@ import { DEFAULT_SETTINGS, DEFAULT_USAGE, recordPlaybookOpen, recordTechniqueVie
 import type { Settings, Usage } from '../lib/settings';
 import { KEYS, createBrowserStorage, loadCollection, loadObject, saveCollection } from '../lib/storage';
 import type { StorageAdapter } from '../lib/storage';
+import { loadTacticAtlasIndex } from '../lib/tacticAtlas';
+import type { TacticAtlasIndex } from '../lib/tacticAtlas';
 
 export type Tone = 'info' | 'success' | 'warning' | 'danger';
 export interface Toast {
@@ -57,6 +59,11 @@ export interface AppContextValue {
   updateSettings: (patch: Partial<Settings>) => void;
   usage: Usage;
   notePlaybookOpened: (id: string) => void;
+
+  /** Index of the sibling TacticAtlas library, when available. */
+  tacticAtlas: TacticAtlasIndex | null;
+  tacticAtlasBase: string;
+  addInvestigation: (inv: Investigation) => void;
 
   techniquePanel: string | null;
   openTechnique: (id: string | null) => void;
@@ -164,6 +171,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAttack({ status: 'ready', index: new AttackIndex(dataset), source, warnings: [], error: null });
   }, []);
 
+  const [tacticAtlas, setTacticAtlas] = useState<TacticAtlasIndex | null>(null);
+  useEffect(() => {
+    void loadTacticAtlasIndex(import.meta.env.BASE_URL).then(setTacticAtlas);
+  }, []);
+  const tacticAtlasBase = (import.meta.env.VITE_TACTICATLAS_URL as string | undefined) ?? '../';
+
+  useEffect(() => {
+    const onUpdate = () => notify('A new version of SOC Navigator was installed. Reload the page to use it.', 'info');
+    window.addEventListener('socnav-update-ready', onUpdate);
+    return () => window.removeEventListener('socnav-update-ready', onUpdate);
+  }, [notify]);
+
+  // Theme: "system" follows the OS preference.
+  useEffect(() => {
+    const apply = () => {
+      const light = settings.theme === 'light' || (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+      document.documentElement.classList.toggle('light', light);
+      document.documentElement.classList.toggle('dark', !light);
+    };
+    apply();
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [settings.theme]);
+
   // --- Playbooks -----------------------------------------------------------------------------
   const library = useMemo(() => mergeLibrary(STARTER_PLAYBOOKS, localPlaybooks), [localPlaybooks]);
   const playbookById = useMemo(() => new Map(library.map((e) => [e.playbook.id, e.playbook])), [library]);
@@ -200,6 +232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateInvestigation = useCallback((id: string, fn: (inv: Investigation) => Investigation) => {
     setInvestigations((list) => list.map((inv) => (inv.id === id ? fn(inv) : inv)));
   }, []);
+  const addInvestigation = useCallback((inv: Investigation) => setInvestigations((list) => [inv, ...list.filter((i) => i.id !== inv.id)]), []);
   const deleteInvestigation = useCallback((id: string) => setInvestigations((list) => list.filter((i) => i.id !== id)), []);
   const replaceInvestigations = useCallback((list: Investigation[]) => setInvestigations(list), []);
   const loadDemoData = useCallback(() => {
@@ -245,6 +278,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateSettings,
     usage,
     notePlaybookOpened,
+    tacticAtlas,
+    tacticAtlasBase,
+    addInvestigation,
     techniquePanel,
     openTechnique,
     toasts,

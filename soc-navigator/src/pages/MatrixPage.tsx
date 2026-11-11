@@ -27,6 +27,7 @@ export function MatrixPage() {
   const platform = params.get('platform') ?? '';
   const dc = params.get('dc') ?? '';
   const pb = (params.get('pb') as PbFilter) || 'all';
+  const group = params.get('group') ?? '';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandAll, setExpandAll] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -53,7 +54,7 @@ export function MatrixPage() {
   };
 
   const searchIds = useMemo(() => (index && q.trim() ? new Set(index.search(q, 2000).map((h) => h.technique.id)) : null), [index, q]);
-  const filtersActive = !!(searchIds || platform || dc || pb !== 'all');
+  const filtersActive = !!(searchIds || platform || dc || group || pb !== 'all');
 
   const matches = useMemo(() => {
     if (!index) return (_t: Technique) => true;
@@ -61,6 +62,7 @@ export function MatrixPage() {
       if (searchIds && !searchIds.has(t.id)) return false;
       if (platform && !t.platforms.includes(platform)) return false;
       if (dc && !t.dataComponents.includes(dc)) return false;
+      if (group && !t.groupIds.includes(group)) return false;
       if (pb !== 'all') {
         const level = coverageLevel(coverage?.get(t.id));
         const has = level === 'direct';
@@ -68,7 +70,7 @@ export function MatrixPage() {
       }
       return true;
     };
-  }, [index, searchIds, platform, dc, pb, coverage]);
+  }, [index, searchIds, platform, dc, group, pb, coverage]);
 
   const columns = useMemo(() => {
     if (!index) return [];
@@ -170,6 +172,7 @@ export function MatrixPage() {
         <Select id="m-tactic" label="Tactic" value={tactic} onChange={(v) => setParam('tactic', v)} options={index.tactics.map((t) => [t.shortname, t.name])} />
         <Select id="m-platform" label="Platform" value={platform} onChange={(v) => setParam('platform', v)} options={index.platforms.map((p) => [p, p])} />
         <Select id="m-dc" label="Data source (component)" value={dc} onChange={(v) => setParam('dc', v)} options={index.dataComponents.map((d) => [d, d])} />
+        <Select id="m-group" label="Threat group" value={group} onChange={(v) => setParam('group', v)} options={index.dataset.groups.map((g) => [g.id, g.name])} />
         <Select
           id="m-pb"
           label="Playbook"

@@ -10,6 +10,10 @@ export const ROLE_LABEL: Record<Role, string> = {
   reviewer: 'Playbook reviewer / approver',
 };
 
+export const THEMES = ['dark', 'light', 'system'] as const;
+export type Theme = (typeof THEMES)[number];
+const slaValue = z.number().int().min(1).max(43_200);
+
 export const settingsSchema = z.object({
   analystName: z.string().trim().max(100),
   role: z.enum(ROLES),
@@ -21,6 +25,11 @@ export const settingsSchema = z.object({
     consent: z.boolean(),
   }),
   demoSeeded: z.boolean(),
+  theme: z.enum(THEMES).default('dark'),
+  /** Target minutes from investigation start to escalation or resolution, per severity. */
+  slaMinutes: z
+    .object({ Critical: slaValue, High: slaValue, Medium: slaValue, Low: slaValue })
+    .default({ Critical: 15, High: 60, Medium: 240, Low: 1440 }),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -31,6 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarCollapsed: false,
   assistant: { mode: 'local', endpoint: '', consent: false },
   demoSeeded: false,
+  theme: 'dark',
+  slaMinutes: { Critical: 15, High: 60, Medium: 240, Low: 1440 },
 };
 
 const techniqueKey = z.string().regex(/^T\d{4}(\.\d{3})?$/);

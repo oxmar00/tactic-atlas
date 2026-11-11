@@ -30,7 +30,7 @@ describe('normalizeStixBundle', () => {
       { id: 'T1562', name: 'Impair Defenses', status: 'revoked', replacedBy: 'T1003' },
       { id: 'T1999', name: 'Deprecated Thing', status: 'deprecated', replacedBy: null },
     ]);
-    expect(ds.meta.counts).toMatchObject({ techniques: 2, subtechniques: 1, revoked: 1, deprecated: 1 });
+    expect(ds.meta.counts).toMatchObject({ techniques: 2, subtechniques: 1, revoked: 1, deprecated: 1, groups: 1, software: 1, mitigations: 1 });
   });
 
   it('links sub-techniques to parents', () => {
@@ -52,6 +52,18 @@ describe('normalizeStixBundle', () => {
     expect(sub.detectionStrategies[0]).toMatchObject({ id: 'DET0001', name: 'Detect PowerShell abuse' });
     expect(sub.detectionStrategies[0].analytics[0].id).toBe('AN0001');
     expect(ds.techniques.find((t) => t.id === 'T1003')!.dataComponents).toEqual([]);
+  });
+
+  it('links groups, software, and mitigations through official relationships only', () => {
+    const sub = ds.techniques.find((t) => t.id === 'T1059.001')!;
+    expect(sub.groupIds).toEqual(['G0016']);
+    expect(sub.softwareIds).toEqual(['S0002']);
+    expect(sub.mitigations).toEqual([{ id: 'M1042', note: 'Remove PowerShell where not needed.' }]);
+    expect(ds.groups).toEqual([{ id: 'G0016', name: 'APT29', aliases: ['Cozy Bear'], url: 'https://attack.mitre.org/groups/G0016' }]);
+    expect(ds.software[0]).toMatchObject({ id: 'S0002', kind: 'tool' });
+    // Revoked group and deprecated mitigation are excluded, as are their relationships.
+    expect(ds.techniques.find((t) => t.id === 'T1003')!.groupIds).toEqual([]);
+    expect(ds.techniques.find((t) => t.id === 'T1003')!.mitigations).toEqual([]);
   });
 
   it('strips citation markers from descriptions', () => {
@@ -137,6 +149,9 @@ describe('committed ATT&CK snapshot', () => {
 
   it('explains revoked IDs', () => {
     expect(index.retiredMatch('t1562')).toMatchObject({ status: 'revoked', replacedBy: 'T1685' });
+    expect(index.get('T1059.001')!.groupIds.length).toBeGreaterThan(20);
+    expect(index.groupById.get('G0016')?.name).toBe('APT29');
+    expect(index.get('T1059.001')!.mitigations.length).toBeGreaterThan(0);
   });
 
   it('builds a Navigator layer with one entry per technique/tactic', () => {

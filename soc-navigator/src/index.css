@@ -27,6 +27,26 @@
   html {
     color-scheme: dark;
   }
+  html.light {
+    color-scheme: light;
+    --color-bg: #f4f6f9;
+    --color-panel: #ffffff;
+    --color-panel-2: #f1f4f8;
+    --color-panel-3: #e3e8ef;
+    --color-line: #d2d9e3;
+    --color-line-strong: #b3bfcd;
+    --color-fg: #1f2a37;
+    --color-fg-strong: #0b1220;
+    --color-muted: #4a5868;
+    --color-faint: #5d6c80;
+    --color-accent: #0b6bcb;
+    --color-accent-strong: #0a5cb0;
+    --color-ok: #137a47;
+    --color-warn: #8f5b00;
+    --color-bad: #c22727;
+    --color-info: #3646a8;
+    --color-violet: #6638bd;
+  }
   body {
     @apply bg-bg text-fg font-sans antialiased;
     font-size: 14px;
@@ -83,6 +103,29 @@
   .print-area {
     color: #000 !important;
     background: #fff !important;
+  }
+  /* Playbooks print with every step and query expanded, on a white page. */
+  .print-expand {
+    display: block !important;
+  }
+  main,
+  main section,
+  main pre {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #999 !important;
+  }
+  main * {
+    color: #000 !important;
+  }
+  main pre {
+    white-space: pre-wrap !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  main section,
+  main li {
+    break-inside: avoid-page;
   }
   .print-area * {
     color: #000 !important;

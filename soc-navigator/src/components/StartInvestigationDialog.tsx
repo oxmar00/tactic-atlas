@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { PlayCircle } from 'lucide-react';
-import { SEVERITIES } from '../lib/investigations/model';
+import { parseAlert } from '../lib/alertParse';
+import type { ParsedAlert } from '../lib/alertParse';
+import { SEVERITIES, setEvidence } from '../lib/investigations/model';
 import type { Severity } from '../lib/investigations/model';
 import { useApp } from '../state/AppState';
 import { PlaybookStatusBadge } from './badges';
 import { Button, Callout, Dialog, Field } from './ui';
 
 export function StartInvestigationDialog({ open, onClose, playbookId }: { open: boolean; onClose: () => void; playbookId?: string }) {
-  const { library, playbookById, createInvestigation, settings, notify } = useApp();
+  const { library, playbookById, createInvestigation, updateInvestigation, settings, notify } = useApp();
+  const [raw, setRaw] = useState('');
+  const [parsed, setParsed] = useState<ParsedAlert | null>(null);
   const navigate = useNavigate();
   const [pbId, setPbId] = useState(playbookId ?? library[0]?.playbook.id ?? '');
   const [alertRef, setAlertRef] = useState('');
@@ -25,6 +29,8 @@ export function StartInvestigationDialog({ open, onClose, playbookId }: { open: 
       setSource('');
       setSeverity('Medium');
       setError(null);
+      setRaw('');
+      setParsed(null);
     }
   }, [open, playbookId, library]);
 
@@ -35,14 +41,65 @@ export function StartInvestigationDialog({ open, onClose, playbookId }: { open: 
     if (!pb) return setError('Choose a playbook.');
     if (!alertRef.trim()) return setError('Enter the alert or ticket reference so the investigation can be traced.');
     const inv = createInvestigation({ playbook: pb, alertRef, title, alertSource: source, severity, analyst: settings.analystName });
+    if (parsed) {
+      const fields = new Set(pb.evidence.map((e) => e.id));
+      const usable = Object.entries(parsed.evidence).filter(([k]) => fields.has(k));
+      if (usable.length) updateInvestigation(inv.id, (i) => usable.reduce((acc, [k, v]) => setEvidence(acc, k, v), i));
+    }
     notify(`Investigation ${inv.id} started.`, 'success');
     onClose();
     navigate(`/investigations/${inv.id}`);
   };
 
+  const readAlert = () => {
+    const p = parseAlert(raw, library.map((e) => e.playbook));
+    setParsed(p);
+    if (p.alertRef && !alertRef) setAlertRef(p.alertRef);
+    if (p.title && !title) setTitle(p.title);
+    if (p.source && !source) setSource(p.source);
+    if (p.severity) setSeverity(p.severity);
+    if (!playbookId && p.suggestions[0]) setPbId(p.suggestions[0].playbookId);
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} title="Start an investigation">
+    <Dialog open={open} onClose={onClose} title="Start an investigation" wide>
       <form onSubmit={submit} className="space-y-3" noValidate>
+        <details className="rounded-md border border-line bg-panel-2 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-fg-strong">Paste the alert to pre-fill (optional)</summary>
+          <div className="mt-2 space-y-2">
+            <label htmlFor="si-raw" className="sr-only">
+              Alert JSON or text
+            </label>
+            <textarea id="si-raw" className="input font-mono text-xs" rows={5} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="Paste alert JSON or key: value text from your SIEM/EDR. It is read in your browser only and treated as untrusted data." />
+            <Button size="sm" onClick={readAlert} disabled={!raw.trim()}>
+              Read alert
+            </Button>
+            {parsed && (
+              <div className="space-y-1 text-xs" aria-live="polite">
+                {parsed.warnings.map((w) => (
+                  <p key={w} className="text-warn">
+                    {w}
+                  </p>
+                ))}
+                <p className="text-muted">
+                  Recognized {Object.keys(parsed.evidence).length} field(s){Object.keys(parsed.evidence).length ? `: ${Object.keys(parsed.evidence).join(', ')}` : ''}. Fields the chosen playbook uses are copied into its evidence checklist - check them before relying on them.
+                </p>
+                {parsed.suggestions.length > 0 && (
+                  <ul className="space-y-0.5">
+                    {parsed.suggestions.map((s) => (
+                      <li key={s.playbookId}>
+                        <button type="button" className="text-accent hover:underline" onClick={() => setPbId(s.playbookId)}>
+                          Suggested: {playbookById.get(s.playbookId)?.title ?? s.playbookId}
+                        </button>{' '}
+                        <span className="text-faint">({s.reasons.join('; ')})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        </details>
         <Field label="Playbook" htmlFor="si-playbook" required>
           <select id="si-playbook" className="input" value={pbId} onChange={(e) => setPbId(e.target.value)}>
             {library.map((e) => (

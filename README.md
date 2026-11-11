@@ -6,7 +6,7 @@ Version 4 replaces executable content markup with a versioned JSON model. The br
 
 ## SOC Navigator (Tier 1 investigation guide)
 
-The [`soc-navigator/`](soc-navigator/README.md) directory contains **SOC Navigator**, a React + TypeScript application built on the official MITRE ATT&CK Enterprise v19.2 STIX data. It provides an interactive Enterprise matrix, 15 technique-specific Tier 1 investigation playbooks (AI-assisted Drafts pending review), an investigation workspace with decision trees and evidence checklists, KQL/SPL query templates, and Tier 2 handoff reports. It is built, tested, and published by the same workflow at `/soc-navigator/`. See its README for setup, ATT&CK refresh, and production requirements.
+The [`soc-navigator/`](soc-navigator/README.md) directory contains **SOC Navigator**, a React + TypeScript application built on the official MITRE ATT&CK Enterprise v20.1 STIX data. It provides an interactive Enterprise matrix, 23 technique-specific Tier 1 investigation playbooks (AI-assisted Drafts pending review), an investigation workspace with decision trees and evidence checklists, KQL/SPL/ES|QL query templates, Sigma rule companions, and Tier 2 handoff reports. Its technique panel links back to the matching TacticAtlas record. It is built, tested, and published by the same workflow at `/soc-navigator/`. See its README for setup, ATT&CK refresh, and production requirements.
 
 ## Capabilities
 

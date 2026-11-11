@@ -56,12 +56,18 @@ const datasetShape = z.object({
           analytics: z.array(z.object({ id: z.string(), platforms: z.array(z.string()), description: z.string(), url: z.string() })),
         }),
       ),
+      groupIds: z.array(z.string()),
+      softwareIds: z.array(z.string()),
+      mitigations: z.array(z.object({ id: z.string(), note: z.string() })),
       version: z.string().nullable(),
       modified: z.string(),
     }),
   ),
   retired: z.array(z.object({ id: z.string(), name: z.string(), status: z.enum(['revoked', 'deprecated']), replacedBy: z.string().nullable() })),
   dataComponents: z.array(z.object({ id: z.string(), name: z.string(), description: z.string() })),
+  groups: z.array(z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()), url: z.string() })),
+  software: z.array(z.object({ id: z.string(), name: z.string(), kind: z.enum(['malware', 'tool']), url: z.string() })),
+  mitigations: z.array(z.object({ id: z.string(), name: z.string(), url: z.string() })),
 });
 
 /** Parses unknown JSON into a validated dataset or throws with a readable reason. */

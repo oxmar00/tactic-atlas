@@ -1,10 +1,18 @@
 import type { Playbook } from '../../lib/playbooks/schema';
+import { accountChanges } from './accountChanges';
 import { bruteForce } from './bruteForce';
+import { cloudCredentials } from './cloudCredentials';
 import { commandAndControl } from './commandAndControl';
 import { credentialDumping } from './credentialDumping';
+import { cron } from './cron';
+import { defenseTampering } from './defenseTampering';
 import { exfiltration } from './exfiltration';
+import { withExtras } from './extras';
+import { inboxRules } from './inboxRules';
 import { ingressTransfer } from './ingressTransfer';
+import { kerberoasting } from './kerberoasting';
 import { lateralMovement } from './lateralMovement';
+import { mfaFatigue } from './mfaFatigue';
 import { phishing } from './phishing';
 import { powershell } from './powershell';
 import { processInjection } from './processInjection';
@@ -13,6 +21,7 @@ import { runKeys } from './runKeys';
 import { scheduledTask } from './scheduledTask';
 import { userExecution } from './userExecution';
 import { validAccounts } from './validAccounts';
+import { webShell } from './webShell';
 import { wmi } from './wmi';
 
 /**
@@ -35,4 +44,12 @@ export const STARTER_PLAYBOOKS: readonly Playbook[] = [
   commandAndControl,
   exfiltration,
   ransomware,
-];
+  mfaFatigue,
+  inboxRules,
+  defenseTampering,
+  kerberoasting,
+  accountChanges,
+  webShell,
+  cloudCredentials,
+  cron,
+].map(withExtras);

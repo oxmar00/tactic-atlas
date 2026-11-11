@@ -6,7 +6,7 @@ import type { Answer } from '../../lib/investigations/model';
 import type { Playbook } from '../../lib/playbooks/schema';
 import { useApp } from '../../state/AppState';
 import { PlaybookStatusBadge } from '../badges';
-import { Badge, Callout, Term, cx, formatDate } from '../ui';
+import { Badge, Button, Callout, CopyButton, Term, cx, downloadFile, formatDate } from '../ui';
 import { DecisionTree } from './DecisionTree';
 import { QueryCard } from './QueryCard';
 import { StepCard } from './StepCard';
@@ -20,6 +20,7 @@ const SECTIONS = [
   ['evidence', 'Evidence to collect'],
   ['escalation', 'Escalation criteria'],
   ['queries', 'Queries'],
+  ['sigma', 'Sigma rules'],
   ['detection', 'Detection notes'],
   ['references', 'References and review'],
 ] as const;
@@ -185,6 +186,35 @@ export function PlaybookView({ pb, preview = false }: { pb: Playbook; preview?: 
               <QueryCard key={q.id} query={q} playbookId={pb.id} />
             ))}
           </div>
+        </Section>
+
+        <Section id="sigma" title={`Detection rule companions (Sigma) (${pb.sigmaRules?.length ?? 0})`}>
+          {!pb.sigmaRules?.length ? (
+            <p className="text-sm text-muted">No Sigma rule is provided for this playbook.</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                For detection engineers: experimental rules in the vendor-neutral Sigma format. They are starting points that have not been tested against your data or tuned for false positives. Recent ATT&amp;CK tactic names (stealth, defense-impairment) may need mapping in older Sigma tooling.
+              </p>
+              {pb.sigmaRules.map((r) => (
+                <div key={r.id} className="rounded-md border border-line bg-panel-2 p-3">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-fg-strong">{r.title}</p>
+                    <span className="no-print flex gap-2">
+                      <CopyButton text={r.rule} label="Copy rule" />
+                      <Button size="sm" onClick={() => downloadFile(`${pb.id}-${r.id}.yml`, r.rule, 'text/yaml')}>
+                        Download .yml
+                      </Button>
+                    </span>
+                  </div>
+                  <p className="mb-2 text-sm text-muted">{r.description}</p>
+                  <pre className="scroll-thin max-h-80 overflow-auto rounded-md border border-line bg-bg p-3 text-[12px] leading-relaxed">
+                    <code>{r.rule}</code>
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
 
         <Section id="detection" title="Detection considerations and visibility gaps">

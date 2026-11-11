@@ -1,5 +1,5 @@
 import { compareTechniqueIds } from './normalize';
-import type { AttackDataset, RetiredTechnique, Tactic, Technique } from './types';
+import type { AttackDataset, GroupRef, MitigationRef, RetiredTechnique, SoftwareRef, Tactic, Technique } from './types';
 
 export interface SearchHit {
   technique: Technique;
@@ -19,6 +19,9 @@ export class AttackIndex {
   readonly tacticByShortname = new Map<string, Tactic>();
   readonly platforms: string[];
   readonly dataComponents: string[];
+  readonly groupById = new Map<string, GroupRef>();
+  readonly softwareById = new Map<string, SoftwareRef>();
+  readonly mitigationById = new Map<string, MitigationRef>();
   private readonly haystacks = new Map<string, { id: string; name: string; text: string; telemetry: string }>();
   private readonly columns = new Map<string, Technique[]>();
 
@@ -27,6 +30,9 @@ export class AttackIndex {
     this.tactics = [...dataset.tactics].sort((a, b) => a.order - b.order);
     for (const t of this.tactics) this.tacticByShortname.set(t.shortname, t);
     for (const r of dataset.retired) this.retiredById.set(r.id, r);
+    for (const g of dataset.groups) this.groupById.set(g.id, g);
+    for (const s of dataset.software) this.softwareById.set(s.id, s);
+    for (const m of dataset.mitigations) this.mitigationById.set(m.id, m);
     const platforms = new Set<string>();
     const components = new Set<string>();
     for (const t of dataset.techniques) {
