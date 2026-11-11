@@ -1,4 +1,4 @@
-import type { EvidenceField, Playbook, QueryPlaceholder } from '../../lib/playbooks/schema';
+import type { EvidenceField, Playbook, QueryPlaceholder, QueryTemplate, SigmaRule } from '../../lib/playbooks/schema';
 
 /**
  * Shared building blocks for the starter playbook library. Every starter playbook is
@@ -109,4 +109,91 @@ export function starterReview(): Playbook['review'] {
 /** Standard references every starter playbook carries in addition to technique pages. */
 export function attackRef(id: string, title: string): { title: string; url: string } {
   return { title: `MITRE ATT&CK ${id} - ${title}`, url: `https://attack.mitre.org/techniques/${id.replace('.', '/')}/` };
+}
+
+/** Builder for Elastic ES|QL templates (ECS field names; index patterns follow Elastic integration defaults). */
+export function esql(
+  id: string,
+  title: string,
+  purpose: string,
+  dataSources: string[],
+  query: string,
+  placeholders: QueryPlaceholder[],
+  positive: string,
+  negative: string,
+  keyFields: QueryTemplate['keyFields'] = [],
+): QueryTemplate {
+  return {
+    id,
+    title,
+    language: 'esql',
+    platform: 'Elastic Security (ES|QL, ECS fields)',
+    purpose,
+    dataSources,
+    query,
+    placeholders,
+    keyFields,
+    positive,
+    negative,
+    prerequisites: 'Elastic Stack 8.14+ with ES|QL, read access to the listed data streams, and the corresponding Elastic integration (Elastic Defend, Windows, System, cloud integrations) collecting the data.',
+    schemaNotes:
+      'Field names follow the Elastic Common Schema (ECS); data stream names are the Elastic integration defaults and differ for custom Beats/Logstash pipelines. Adjust the time window in the WHERE clause. String comparisons are case-sensitive unless wrapped in TO_LOWER().',
+    example: placeholders.map((p) => `${p.name} = ${p.example}`).join(', '),
+  };
+}
+
+/** Builder for a platform-neutral procedure. */
+export function genericProcedure(id: string, title: string, steps: string): QueryTemplate {
+  return {
+    id,
+    title,
+    language: 'generic',
+    platform: 'Any SIEM / EDR',
+    purpose: 'Platform-neutral checklist when the SIEM product or schema is unknown.',
+    dataSources: ['Logs described in the playbook steps'],
+    query: steps,
+    placeholders: [],
+    keyFields: [],
+    positive: 'Each finding is a lead to evaluate in the decision tree, not a verdict.',
+    negative: 'A clean result only covers the sources and time range searched; record both.',
+    prerequisites: 'Read access to the relevant logs.',
+    schemaNotes: 'Adapt to your platform; field names differ between products.',
+    example: '',
+  };
+}
+
+/** Sigma rule text with the shared header fields filled in. */
+export function sigma(
+  id: string,
+  uuid: string,
+  title: string,
+  description: string,
+  tags: string[],
+  logsource: string,
+  detection: string,
+  falsepositives: string[],
+  level: 'low' | 'medium' | 'high' | 'critical',
+): SigmaRule {
+  const techniques = tags.filter((t) => /^attack\.t\d/.test(t)).map((t) => t.slice(7).toUpperCase());
+  const rule = [
+    `title: ${title}`,
+    `id: ${uuid}`,
+    'status: experimental',
+    `description: ${description}`,
+    'references:',
+    ...techniques.map((t) => `    - https://attack.mitre.org/techniques/${t.replace('.', '/')}/`),
+    `author: ${STARTER_AUTHOR}`,
+    'date: 2026-11-11',
+    'tags:',
+    ...tags.map((t) => `    - ${t}`),
+    'logsource:',
+    logsource,
+    'detection:',
+    detection,
+    'falsepositives:',
+    ...falsepositives.map((f) => `    - ${f}`),
+    `level: ${level}`,
+    '',
+  ].join('\n');
+  return { id, title, description, rule };
 }

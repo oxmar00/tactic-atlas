@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 import { LOG_SOURCE_BY_ID } from '../src/data/logSources';
 import { STARTER_PLAYBOOKS } from '../src/data/playbooks';
 import { AttackIndex } from '../src/lib/attack/attackIndex';
@@ -21,9 +22,9 @@ import type { Playbook } from '../src/lib/playbooks/schema';
 const index = new AttackIndex(parseDataset(JSON.parse(readFileSync('public/data/attack-enterprise.json', 'utf8'))));
 
 describe('starter playbook library', () => {
-  it('contains the 15 required investigation areas with unique IDs', () => {
-    expect(STARTER_PLAYBOOKS).toHaveLength(15);
-    expect(new Set(STARTER_PLAYBOOKS.map((p) => p.id)).size).toBe(15);
+  it('contains the 23 starter playbooks with unique IDs', () => {
+    expect(STARTER_PLAYBOOKS).toHaveLength(23);
+    expect(new Set(STARTER_PLAYBOOKS.map((p) => p.id)).size).toBe(23);
   });
 
   it.each(STARTER_PLAYBOOKS.map((p) => [p.id, p] as const))('%s passes schema validation', (_id, pb) => {
@@ -47,9 +48,9 @@ describe('starter playbook library', () => {
     expect(pb.review.reviewer).toBeNull();
   });
 
-  it.each(STARTER_PLAYBOOKS.map((p) => [p.id, p] as const))('%s provides KQL, SPL, and generic guidance plus complete steps', (_id, pb) => {
+  it.each(STARTER_PLAYBOOKS.map((p) => [p.id, p] as const))('%s provides KQL, SPL, ES|QL, and generic guidance plus complete steps', (_id, pb) => {
     const langs = new Set(pb.queries.map((q) => q.language));
-    expect(langs).toEqual(new Set(['kql', 'spl', 'generic']));
+    expect(langs).toEqual(new Set(['kql', 'spl', 'esql', 'generic']));
     expect(pb.steps.length).toBeGreaterThanOrEqual(5);
     for (const s of pb.steps) {
       expect(s.where.length).toBeGreaterThan(0);
@@ -98,6 +99,22 @@ describe('starter playbook library', () => {
         expect(q.positive.length).toBeGreaterThan(20);
         expect(q.negative.length).toBeGreaterThan(20);
       }
+    }
+  });
+
+  it('Sigma rules are valid YAML with the required Sigma fields and active ATT&CK tags', () => {
+    const rules = STARTER_PLAYBOOKS.flatMap((p) => (p.sigmaRules ?? []).map((r) => ({ p, r })));
+    expect(rules.length).toBeGreaterThanOrEqual(12);
+    const ids = new Set<string>();
+    for (const { p, r } of rules) {
+      const doc = parseYaml(r.rule) as Record<string, unknown>;
+      for (const key of ['title', 'id', 'status', 'description', 'logsource', 'detection', 'level']) expect(doc[key], `${p.id}/${r.id} ${key}`).toBeTruthy();
+      expect(String(doc.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(ids.has(String(doc.id))).toBe(false);
+      ids.add(String(doc.id));
+      expect((doc.detection as Record<string, unknown>).condition).toBeTruthy();
+      const tags = doc.tags as string[];
+      for (const t of tags.filter((x) => /^attack\.t\d/.test(x))) expect(index.get(t.slice(7).toUpperCase()), `${r.id} tag ${t}`).toBeDefined();
     }
   });
 
@@ -153,7 +170,7 @@ describe('library operations', () => {
     const revised = { ...STARTER_PLAYBOOKS[0], title: 'Revised', source: 'local' as const };
     const extra = blankPlaybook('PB-LOCAL-001', 'author');
     const merged = mergeLibrary(STARTER_PLAYBOOKS, [revised, extra]);
-    expect(merged).toHaveLength(16);
+    expect(merged).toHaveLength(24);
     expect(merged[0]).toMatchObject({ origin: 'local-revision', playbook: { title: 'Revised' } });
     expect(merged.at(-1)?.origin).toBe('local');
   });

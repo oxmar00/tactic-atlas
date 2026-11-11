@@ -32,6 +32,9 @@ export interface AttackDatasetMeta {
     deprecated: number;
     detectionStrategies: number;
     analytics: number;
+    groups: number;
+    software: number;
+    mitigations: number;
   };
 }
 
@@ -90,8 +93,37 @@ export interface Technique {
   /** Distinct log sources referenced by official analytics (capped for size). */
   logSources: LogSourceRef[];
   detectionStrategies: DetectionStrategyRef[];
+  /** G#### IDs of groups with a direct "uses" relationship to this technique. */
+  groupIds: string[];
+  /** S#### IDs of malware/tools with a direct "uses" relationship. */
+  softwareIds: string[];
+  /** Official mitigations with MITRE's technique-specific note. */
+  mitigations: { id: string; note: string }[];
   version: string | null;
   modified: string;
+}
+
+export interface GroupRef {
+  /** G#### */
+  id: string;
+  name: string;
+  aliases: string[];
+  url: string;
+}
+
+export interface SoftwareRef {
+  /** S#### */
+  id: string;
+  name: string;
+  kind: 'malware' | 'tool';
+  url: string;
+}
+
+export interface MitigationRef {
+  /** M#### */
+  id: string;
+  name: string;
+  url: string;
 }
 
 export interface RetiredTechnique {
@@ -117,4 +149,7 @@ export interface AttackDataset {
   /** Revoked or deprecated objects, kept so legacy IDs resolve with an explanation. */
   retired: RetiredTechnique[];
   dataComponents: DataComponentRef[];
+  groups: GroupRef[];
+  software: SoftwareRef[];
+  mitigations: MitigationRef[];
 }
